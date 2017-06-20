@@ -69,7 +69,7 @@ def run_script(iface):
     ##PARAMETERS
     
     #MODIS date to map out
-    modisDate = '2017-02-18'
+    modisDate = '2017-05-25'
     
     #% of coffee masks to map out (the rasters for each should have been prepared in advance
     modisPct = ['5','15']
