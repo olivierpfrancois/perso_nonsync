@@ -42,7 +42,7 @@ def run_script(iface):
     #################################################################################################################################
     ### GET PARAMETERS
     #Address of the shapefile
-    shpName = 'D:/gedata_current/jde_coffee/data/ES/areas/ES_direct_cells_conf_cells1K.shp'
+    shpName = 'D:/gedata_current/jde_coffee/data/ES/areas/ES_direct_cells_conf_cells2K.shp'
     
     #Name of variable in the shapefile with the ID of the polygons
     index = 'serp_id' #'Station'
@@ -52,7 +52,7 @@ def run_script(iface):
     #imgFolder = 'D:/gedata_current/jde_coffee/MODIS/collection6/ES/weights' #Folder for the computation of MODIS weights
     
     #Name for the txt output with the sum of NDVI inside each polygon
-    outName = 'D:/gedata_current/jde_coffee/MODIS/collection6/ES/weights/ES_1kmgrid_modis_weights_sum.txt'
+    outName = 'D:/gedata_current/jde_coffee/MODIS/collection6/ES/ES_2kmgrid_modis_ndvi_sum_alldates.txt'
     #outName = 'D:/gedata_current/jde_coffee/MODIS/collection6/ES/weights/ES_1kmgrid_modis_weights_sum.txt' #Name for the computation of MODIS weights
     
     

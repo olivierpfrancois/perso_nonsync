@@ -34,6 +34,8 @@ def run_script(iface):
     exportClassifName = 'D:/gedata_current/jde_coffee/data/SDM/classifs/combined_classif_SDM.tif'
     exportLegendName = 'D:/gedata_current/jde_coffee/data/SDM/classifs/legend_combined_classif_SDM.txt'
     
+    
+    
     #Check the computer platform
     ordi = checkPlatform()
         
