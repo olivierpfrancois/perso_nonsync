@@ -14,62 +14,14 @@ from qgis.gui import *
 import qgis.utils as qu
 from datetime import datetime
 
-def run_script(iface):
-    
-    def exportMap(theComposition, exportFormat, outFName):
-        """
-        ---------------------------------------------------------------------------------------------
-        Function : exports the Map in PNG or PDF format and saves on disk
-        ---------------------------------------------------------------------------------------------
-        """
-        # PDF Output
-        if exportFormat == 'PDF':
-            printer = QPrinter()
-            printer.setOutputFormat(QPrinter.PdfFormat)
-            printer.setOutputFileName(outFName)
-            printer.setPaperSize(QSizeF(theComposition.paperWidth(), theComposition.paperHeight()), QPrinter.Millimeter)
-            printer.setFullPage(True)
-            printer.setColorMode(QPrinter.Color)
-            printer.setResolution(theComposition.printResolution())
-    
-            pdfPainter = QPainter(printer)
-            paperRectMM = printer.pageRect(QPrinter.Millimeter)
-            paperRectPixel = printer.pageRect(QPrinter.DevicePixel)
-            theComposition.render(pdfPainter, paperRectPixel, paperRectMM)
-            pdfPainter.end()
-    
-        # IMAGE output
-        elif exportFormat == 'PNG':
-    
-            # Set dimensions and resolution
-            dpi = theComposition.printResolution()
-            dpmm = (dpi / 25.4)
-            width = int(dpmm * theComposition.paperWidth())
-            height = int(dpmm * theComposition.paperHeight())
-    
-            # Create output image and initialize it
-            image = QImage(QSize(width, height), QImage.Format_ARGB32)
-            image.setDotsPerMeterX(dpmm * 1000)
-            image.setDotsPerMeterY(dpmm * 1000)
-            image.fill(0)
-    
-            # Render composition
-            imagePainter = QPainter(image)
-            sourceArea = QRectF(0, 0, theComposition.paperWidth(), theComposition.paperHeight())
-            targetArea = QRectF(0, 0, width, height)
-            theComposition.render(imagePainter, targetArea, sourceArea)
-            imagePainter.end()
-    
-            # Save image to disk 
-            image.save(outFName, exportFormat.lower())   
-        
+def run_script(iface):    
         
     #########################################################################################################################
     #########################################################################################################################
     ##PARAMETERS
     
     #MODIS date to map out
-    modisDate = '2017-05-25'
+    modisDate = '2017-06-26'
     
     #% of coffee masks to map out (the rasters for each should have been prepared in advance
     modisPct = ['5','15']
@@ -360,3 +312,50 @@ def run_script(iface):
             outNm = modisPrefix+'/'+states[s]+'/'+states[s]+'_decile_comparison_'+modisDate+'_'+p+'pct.pdf' #Create name
             exportMap(c, exportFormat, outNm) 
         
+
+def exportMap(theComposition, exportFormat, outFName):
+    """
+    ---------------------------------------------------------------------------------------------
+    Function : exports the Map in PNG or PDF format and saves on disk
+    ---------------------------------------------------------------------------------------------
+    """
+    # PDF Output
+    if exportFormat == 'PDF':
+        printer = QPrinter()
+        printer.setOutputFormat(QPrinter.PdfFormat)
+        printer.setOutputFileName(outFName)
+        printer.setPaperSize(QSizeF(theComposition.paperWidth(), theComposition.paperHeight()), QPrinter.Millimeter)
+        printer.setFullPage(True)
+        printer.setColorMode(QPrinter.Color)
+        printer.setResolution(theComposition.printResolution())
+
+        pdfPainter = QPainter(printer)
+        paperRectMM = printer.pageRect(QPrinter.Millimeter)
+        paperRectPixel = printer.pageRect(QPrinter.DevicePixel)
+        theComposition.render(pdfPainter, paperRectPixel, paperRectMM)
+        pdfPainter.end()
+
+    # IMAGE output
+    elif exportFormat == 'PNG':
+
+        # Set dimensions and resolution
+        dpi = theComposition.printResolution()
+        dpmm = (dpi / 25.4)
+        width = int(dpmm * theComposition.paperWidth())
+        height = int(dpmm * theComposition.paperHeight())
+
+        # Create output image and initialize it
+        image = QImage(QSize(width, height), QImage.Format_ARGB32)
+        image.setDotsPerMeterX(dpmm * 1000)
+        image.setDotsPerMeterY(dpmm * 1000)
+        image.fill(0)
+
+        # Render composition
+        imagePainter = QPainter(image)
+        sourceArea = QRectF(0, 0, theComposition.paperWidth(), theComposition.paperHeight())
+        targetArea = QRectF(0, 0, width, height)
+        theComposition.render(imagePainter, targetArea, sourceArea)
+        imagePainter.end()
+
+        # Save image to disk 
+        image.save(outFName, exportFormat.lower())   
