@@ -39,7 +39,7 @@ def run_script(iface):
     ##REGIONS parameters
     #Regions to process inputs    !!!!SHOULD BE IN EPSG 4326 PROJECTION
     #Names of the regions (also folders names) 
-    states = ["ES"] #["CER","CHA","CO","ES","MO","SDM","SP","ZM"]
+    states = ["ES","CER","CHA","CO","ES","MO","SDM","SP","ZM"]
     #Addresses of the shapefiles with the boundaries for each of the regions
     statesBoundFiles = ['/media/olivier/olivier_ext/gedata_current/jde_coffee/data/'+s+'/aoi/AOI_'+s+'.shp' 
                             for s in states] #Address of the boundary files !!!!SHOULD BE IN EPSG 4326 PROJECTION
@@ -47,10 +47,12 @@ def run_script(iface):
     statesRawFolder = 'raw_data'
     #Name of subfolder where to save the smoothed mosaic data (should be in the folders of the regions)
     statesSmoothFolder = 'smooth_data'
-    
+    #Name of subfolder where to save (if produced) and get the reference baseline for each date in the year (should be in the folders of the regions)
+    statesRefFolder = 'baseline'
     
         
     ##DOWNLOAD parameters
+    dload = True
     #Product to download
     product = 'MOD13Q1.006'
     #Username for the earthdata website
@@ -66,11 +68,10 @@ def run_script(iface):
     #End date for the product download (format YYYY-MM-DD)
     #    If None, defaults to today
     endDownload = None
- 
     
     ##MOSAIC parameters
     #Should the downloaded files be mosaiced for each of the regions?
-    mosaic = False
+    mosaic = True
     #Starting date for the files to mosaic
     #    If None, will default to the files that have been just downloaded if any.
     startMosaic = None
@@ -81,7 +82,7 @@ def run_script(iface):
     
     
     ##SMOOTHING parameters
-    smooth = False
+    smooth = True
     regWindow = 7
     avgWindow = 3
     #Starting date for the files to include as input in the smoothing process
@@ -100,27 +101,25 @@ def run_script(iface):
     
     ##Reference rasters parameters
     createBaselines = False
-    #Name of subfolder where to save the reference baseline for each date in the year (should be in the folders of the regions)
-    statesRefFolder = 'baseline'
     #Starting and ending years for the reference period. Included.
     startRef = 2006
     endRef = 2016
     #Mask and output model to use for the baseline rasters. 
     #The mask should overlap perfectly with the modis images
     #The output model can have a different resolution, in which case the baseline will be produced with that resolution
-    maskBaseline = None #['masks/ES_densities_robusta_from_classifications_250m.tif']
-    outModelRaster = None #['masks/ES_densities_robusta_from_classifications_1km.tif']
+    maskBaseline = ['masks/ES_densities_robusta_from_classifications_250m.tif','masks/SDM_densities_arabica_from_classifications_250m.tif']
+    outModelRaster = ['masks/ES_densities_robusta_from_classifications_1km.tif','masks/SDM_densities_arabica_from_classifications_1km.tif']
     
-    
+    states = ["ES","SDM"]
     ##Ranking individual dates modis images in terms of deciles using the baselines
-    ranking = False
+    ranking = True
     #Starting and ending dates for the images to consider. Included
     startRank = '2017-06-15'
     endRank = '2017-06-30'
     #File to use for masking the output
-    maskRank = ['masks/ES_densities_robusta_from_classifications_250m.tif']
+    maskRank = ['masks/ES_densities_robusta_from_classifications_1km.tif','masks/SDM_densities_arabica_from_classifications_1km.tif']
     #Varieties in each case
-    varieties = ['robusta']
+    varieties = ['robusta','arabica']
     #Minimum density of coffee to consider 
     minCoffee = [0.05,0.15]
     
@@ -131,22 +130,26 @@ def run_script(iface):
     startAvg = None
     #    If None, will default to today
     endAvg = None
-    #Grid/Raster to use for the averaging
-    avgWeights = ['/media/olivier/olivier_ext/gedata_current/jde_coffee/data/ES/areas/ES_area_cor.shp']
-    #avgWeights = ['masks/ES_densities_robusta_from_classifications_250m.tif']
+    #Grid/Raster to use for the averaging --> FULL PATH!!!!!!!
+    avgWeights = ['/media/olivier/olivier_ext/gedata_current/jde_coffee/data/ES/areas/ES_area_cor.shp',
+                  '/media/olivier/olivier_ext/gedata_current/jde_coffee/data/SDM/areas/SDM_area_cor.shp']
+    #avgWeights = ['/media/olivier/olivier_ext/gedata_current/jde_coffee/MODIS/collection6/ES/masks/ES_densities_robusta_from_classifications_250m.tif',
+    #              '/media/olivier/olivier_ext/gedata_current/jde_coffee/MODIS/collection6/SDM/masks/SDM_densities_arabica_from_classifications_250m.tif']
     #Name of the variable with the coffee weights if using a shapefile
     #    Put None if using a raster for an area
-    weightField = ['robusta_co']
+    weightField = ['robusta_co','arabica_co']
     
     #####################################################################################################################
     #####################################################################################################################
     ##ACTIVE CODE
-    '''
-    newHdf = downloadMODIS(dstFolder=os.path.join(dst,rawdataDir), 
-            pwd=pwd, user=user, tiles=tiles, product=product, startDownload=startDownload, 
-            endDownload=endDownload)
-    '''
-    newHdf = []
+    
+    if dload:
+        newHdf = downloadMODIS(dstFolder=os.path.join(dst,rawdataDir), 
+                               pwd=pwd, user=user, tiles=tiles, product=product, startDownload=startDownload, 
+                               endDownload=endDownload)
+    else:
+        newHdf = []
+    
     if mosaic:
         
         thereHdf = [f for f in os.listdir(os.path.join(dst,rawdataDir)) if f.endswith('.hdf')]
@@ -815,7 +818,7 @@ def rankDatesDeciles(root, regions, varieties, regionsIn, refDecilesIn, startRan
         #Transform into days from start of the year and keep only the unique values
         days = [d.strftime('%j') for d in datesAll]
         
-        #Get the names of the decile baslines on disk
+        #Get the names of the decile baselines on disk
         baseFiles = [f for f in os.listdir(os.path.join(root,regions[r],refDecilesIn)) if f.endswith('.tif')]
         
         #Import the mask
@@ -962,15 +965,15 @@ def computeAvgNdvi(root, regions, regionsIn, avgWeights, weightField=None, start
     #Create an empty dictionary to get the values for each of the regions
     averages = []
     
-    for r,w,v in zip(regions, avgWeights, weightField):
-        if not w:
+    for r in range(len(regions)):
+        if not avgWeights[r]:
             continue
         
         #Get the images to consider
-        print('Averaging region '+str(r)+'...')
+        print('Averaging region '+str(regions[r])+'...')
         
         #Import all the smooth modis images on disk
-        onDisk = [f for f in os.listdir(os.path.join(root,r,regionsIn)) if f.endswith('.tif')]
+        onDisk = [f for f in os.listdir(os.path.join(root,regions[r],regionsIn)) if f.endswith('.tif')]
         
         #Dates of these files
         datesAll = [re.search('_([0-9]{4}-[0-9]{2}-[0-9]{2})', f).group(1) for f in onDisk]
@@ -982,22 +985,22 @@ def computeAvgNdvi(root, regions, regionsIn, avgWeights, weightField=None, start
         datesAll = [d for d in datesAll if d >= startAvg and d <= endAvg]
         
         if not onDisk:
-            print('no modis images to process in '+r)
+            print('no modis images to process in '+regions[r])
             continue
         
         #Get a base image as a reference for format
-        baseImg = gdal.Open(os.path.join(root,r,regionsIn,onDisk[0]))
+        baseImg = gdal.Open(os.path.join(root,regions[r],regionsIn,onDisk[0]))
         
         #Rasterize the gridded weights if needed or simply import it
-        if w.endswith('.shp'):
-            if not v:
+        if avgWeights[r].endswith('.shp'):
+            if not weightField[r]:
                 print('The name of the field with the densities needs to be specified to average')
                 break
             
             #Import the vector layer
             #Open the shapefile
             driver = ogr.GetDriverByName('ESRI Shapefile')
-            dataSource = driver.Open(os.path.join(root,r,w), 0) # 0 means read-only. 1 means writeable.
+            dataSource = driver.Open(avgWeights[r], 0) # 0 means read-only. 1 means writeable.
         
             # Create layer
             inVecLayer = dataSource.GetLayer(0)
@@ -1012,12 +1015,12 @@ def computeAvgNdvi(root, regions, regionsIn, avgWeights, weightField=None, start
                 alltouch = 'FALSE'
         
             # Rasterize the vector layer:
-            gdal.RasterizeLayer(weightsRaster, [1], inVecLayer, options=['ALL_TOUCHED='+alltouch, 'ATTRIBUTE='+v])
+            gdal.RasterizeLayer(weightsRaster, [1], inVecLayer, options=['ALL_TOUCHED='+alltouch, 'ATTRIBUTE='+weightField[r]])
             
             inVecLayer = None
             
-        elif w.endswith(('.tif','.TIF')):
-            weightsRaster = gdal.Open(os.path.join(root,r,w))
+        elif avgWeights[r].endswith(('.tif','.TIF')):
+            weightsRaster = gdal.Open(avgWeights[r])
             
             #Change the resolution of the raster to match the images if needed
             
@@ -1033,7 +1036,7 @@ def computeAvgNdvi(root, regions, regionsIn, avgWeights, weightField=None, start
         #Loop through the images to compute the average for each
         for img, date in zip(onDisk,datesAll):
             #Import the image
-            baseImg = gdal.Open(os.path.join(root,r,regionsIn,img))
+            baseImg = gdal.Open(os.path.join(root,regions[r],regionsIn,img))
             
             #Loop through the blocks to compute the average for each
             
@@ -1082,7 +1085,7 @@ def computeAvgNdvi(root, regions, regionsIn, avgWeights, weightField=None, start
             sumNdvi = sumNdvi/(250)*10000 
             
             #Add to the output dictionary along with the date and region as a dictionary
-            averages.append({'region':r,'date':date,'ndviPerHa':sumNdvi})
+            averages.append({'region':regions[r],'date':date,'ndviPerHa':sumNdvi})
             
     #Export the dictionary
     outNm = 'Weighted_avg_ndvi_'+startAvg.strftime('%Y-%m-%d')+'_'+endAvg.strftime('%Y-%m-%d')+'.txt'
