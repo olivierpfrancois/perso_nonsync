@@ -1,17 +1,17 @@
 from osgeo import ogr, gdal, osr, gdalconst
-from csv import DictWriter
-import os, processing, re, csv, platform, sys
+import os, re, csv, platform, sys
 import numpy as np
+import subprocess
 
 def run_script(iface):
     #Address of the folder with the classifications
-    classifFolder = 'D:/gedata_current/jde_coffee/data/SDM/classifs'
+    classifFolder = '/media/olivier/olivier_ext/gedata_current/jde_coffee/data/SP/classifs'
     
     #Address of the folder with the legends
-    legendFolder = 'D:/gedata_current/jde_coffee/data/SDM/classifs/Legend'
+    legendFolder = '/media/olivier/olivier_ext/gedata_current/jde_coffee/data/SP/classifs/Legend'
     
     #Address of the folder for the temporary files
-    tempFolder = 'D:/gedata_current/jde_coffee/data/SDM/temp'
+    tempFolder = '/media/olivier/olivier_ext/gedata_current/temp'
     
     #Legend file names prefix to add to the classification names
     legendPrefix = 'legend_'
@@ -23,16 +23,16 @@ def run_script(iface):
     #Classes to pass to NA values in combining the classifications
     #Leave an empty list if None
     #These names should not include any trailing numbers if several categories have been made (e.g. Cloud1, Cloud2...)
-    toNa = ['Cloud','Shadow']
+    toNa = ['cloud','shadow']
     valuesNotInLegend = [0]
     
     #TAB delimited file with the priority order in which to combine the classifications
     #The file should have two columns, the first is a priority number, the second the file name of the classification
-    orderClassif = 'D:/gedata_current/jde_coffee/data/SDM/classifs/classif_priorities_SDM.txt'
+    orderClassif = '/media/olivier/olivier_ext/gedata_current/jde_coffee/data/SP/classifs/classif_priorities_SP.txt'
     
     #Ouput name and address for the combined files and legend
-    exportClassifName = 'D:/gedata_current/jde_coffee/data/SDM/classifs/combined_classif_SDM.tif'
-    exportLegendName = 'D:/gedata_current/jde_coffee/data/SDM/classifs/legend_combined_classif_SDM.txt'
+    exportClassifName = '/media/olivier/olivier_ext/gedata_current/jde_coffee/data/SP/classifs/combined_classif_SP.tif'
+    exportLegendName = '/media/olivier/olivier_ext/gedata_current/jde_coffee/data/SP/classifs/legend_combined_classif_SP.txt'
     
     
     
@@ -66,13 +66,13 @@ def run_script(iface):
             next(f) # skip headings
             reader=csv.reader(f,delimiter=legendDel)
             for v,c in reader:
-                dict[int(v)] = re.sub('[0-9]*$','',c)
+                dict[int(v)] = re.sub('[0-9]*$','',c.lower())
         #Add to the list
         legends.append(dict)
     
     #Establish a common legend for all the classifications
-    #Get the unique class names
-    commonLegend = {v for l in legends for v in l.values()}
+    #Get the unique class names and remove any of the categories being mapped to NA
+    commonLegend = {v for l in legends for v in l.values() if v not in toNa}
     commonLegend = list(commonLegend)
     #Add a raster value by alphabetical order
     commonLegend = {nm:i for i,nm in enumerate(sorted(commonLegend),1)}
@@ -177,7 +177,7 @@ def run_script(iface):
         os.remove(tempFolder+'/reclass_'+nm+'.tif')
     
     
-def new_raster_from_base(base, outputURI, format, nodata, datatype, bands=None):
+def new_raster_from_base(base, outputURI, formatD, nodata, datatype, bands=None):
     """
     ---------------------------------------------------------------------------------------------
     Function : Create an empty copy of a raster from an existing one
@@ -190,7 +190,7 @@ def new_raster_from_base(base, outputURI, format, nodata, datatype, bands=None):
     - outputURI: string
         Address + name of the output raster (extension should agree with format, none for memory)
         
-    - format: string
+    - formatD: string
         Format for the dataset (e.g. "GTiff", "MEM") 
     
     - nodata: int/float
@@ -214,9 +214,9 @@ def new_raster_from_base(base, outputURI, format, nodata, datatype, bands=None):
     if not bands:
         bands = base.RasterCount
 
-    driver = gdal.GetDriverByName(format)
+    driver = gdal.GetDriverByName(formatD)
     
-    if format == "GTiff":
+    if formatD == "GTiff":
         new_raster = driver.Create(str(outputURI), cols, rows, bands, datatype, options=['COMPRESS=LZW'])
     else:
         new_raster = driver.Create(str(outputURI), cols, rows, bands, datatype)

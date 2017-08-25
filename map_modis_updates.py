@@ -13,6 +13,7 @@ from qgis.core import *
 from qgis.gui import *
 import qgis.utils as qu
 from datetime import datetime
+import os
 
 def run_script(iface):    
         
@@ -21,7 +22,7 @@ def run_script(iface):
     ##PARAMETERS
     
     #MODIS date to map out
-    modisDate = '2017-06-26'
+    modisDate = '2017-05-25'
     
     #% of coffee masks to map out (the rasters for each should have been prepared in advance
     modisPct = ['5','15']
@@ -310,7 +311,17 @@ def run_script(iface):
             #EXPORT THE MAP
             
             outNm = modisPrefix+'/'+states[s]+'/'+states[s]+'_decile_comparison_'+modisDate+'_'+p+'pct.pdf' #Create name
-            exportMap(c, exportFormat, outNm) 
+            exportMap(c, exportFormat, outNm)
+        
+        #Remove raster layer (modis)
+        #for layer in registry.mapLayers().values():
+        #    if layer.name() == '':
+        #        registry.removeMapLayers([layer.id()])
+        
+        #Clean the xml files
+        xml = [f for f in os.listdir(os.path.join(modisPrefix,states[s])) if f.endswith('.aux.xml')]
+        for f in xml:
+            os.remove(os.path.join(modisPrefix+'/'+states[s],f))
         
 
 def exportMap(theComposition, exportFormat, outFName):

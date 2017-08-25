@@ -39,7 +39,7 @@ def run_script(iface):
     ##REGIONS parameters
     #Regions to process inputs    !!!!SHOULD BE IN EPSG 4326 PROJECTION
     #Names of the regions (also folders names) 
-    states = ["ES","CER","CHA","CO","ES","MO","SDM","SP","ZM"]
+    states = ["CER","CHA","CO","ES","MO","SDM","SP","ZM"]
     #Addresses of the shapefiles with the boundaries for each of the regions
     statesBoundFiles = ['/media/olivier/olivier_ext/gedata_current/jde_coffee/data/'+s+'/aoi/AOI_'+s+'.shp' 
                             for s in states] #Address of the boundary files !!!!SHOULD BE IN EPSG 4326 PROJECTION
@@ -107,37 +107,76 @@ def run_script(iface):
     #Mask and output model to use for the baseline rasters. 
     #The mask should overlap perfectly with the modis images
     #The output model can have a different resolution, in which case the baseline will be produced with that resolution
-    maskBaseline = ['masks/ES_densities_robusta_from_classifications_250m.tif','masks/SDM_densities_arabica_from_classifications_250m.tif']
-    outModelRaster = ['masks/ES_densities_robusta_from_classifications_1km.tif','masks/SDM_densities_arabica_from_classifications_1km.tif']
+    maskBaseline = ['masks/CER_densities_arabica_from_classifications_250m.tif',
+                    'masks/CHA_densities_arabica_from_classifications_250m.tif',
+                    'masks/CO_densities_arabica_from_classifications_250m.tif',
+                    'masks/ES_densities_robusta_from_classifications_250m.tif',
+                    'masks/MO_densities_arabica_from_classifications_250m.tif',
+                    'masks/SDM_densities_arabica_from_classifications_250m.tif',
+                    'masks/SP_densities_arabica_from_classifications_250m.tif',
+                    'masks/ZM_densities_arabica_from_classifications_250m.tif']
+    outModelRaster = ['masks/CER_densities_arabica_from_classifications_1km.tif',
+                      'masks/CHA_densities_arabica_from_classifications_1km.tif',
+                      'masks/CO_densities_arabica_from_classifications_1km.tif',
+                      'masks/ES_densities_robusta_from_classifications_1km.tif',
+                      'masks/MO_densities_arabica_from_classifications_1km.tif',
+                      'masks/SDM_densities_arabica_from_classifications_1km.tif',
+                      'masks/SP_densities_arabica_from_classifications_1km.tif',
+                      'masks/ZM_densities_arabica_from_classifications_1km.tif']
     
-    states = ["ES","SDM"]
     ##Ranking individual dates modis images in terms of deciles using the baselines
     ranking = True
     #Starting and ending dates for the images to consider. Included
-    startRank = '2017-06-15'
-    endRank = '2017-06-30'
+    #   If None, will default to 30 days
+    startRank = None #'2017-05-15'
+    #   If None, will default to today
+    endRank = None
     #File to use for masking the output
-    maskRank = ['masks/ES_densities_robusta_from_classifications_1km.tif','masks/SDM_densities_arabica_from_classifications_1km.tif']
+    maskRank = ['masks/CER_densities_arabica_from_classifications_1km.tif',
+                'masks/CHA_densities_arabica_from_classifications_1km.tif',
+                'masks/CO_densities_arabica_from_classifications_1km.tif',
+                'masks/ES_densities_robusta_from_classifications_1km.tif',
+                'masks/MO_densities_arabica_from_classifications_1km.tif',
+                'masks/SDM_densities_arabica_from_classifications_1km.tif',
+                'masks/SP_densities_arabica_from_classifications_1km.tif',
+                'masks/ZM_densities_arabica_from_classifications_1km.tif']
     #Varieties in each case
-    varieties = ['robusta','arabica']
+    varieties = ['arabica','arabica','arabica','robusta','arabica','arabica','arabica','arabica']
     #Minimum density of coffee to consider 
     minCoffee = [0.05,0.15]
     
     ##Estimate average ndvi value for each region
     avgValue = True
     #Starting and ending dates for the images to consider. Included
-    #    If None, defaults to 6 months before today
-    startAvg = None
+    #    If None, defaults to 1 year before today
+    startAvg = None #'2005-01-01'
     #    If None, will default to today
     endAvg = None
     #Grid/Raster to use for the averaging --> FULL PATH!!!!!!!
-    avgWeights = ['/media/olivier/olivier_ext/gedata_current/jde_coffee/data/ES/areas/ES_area_cor.shp',
-                  '/media/olivier/olivier_ext/gedata_current/jde_coffee/data/SDM/areas/SDM_area_cor.shp']
-    #avgWeights = ['/media/olivier/olivier_ext/gedata_current/jde_coffee/MODIS/collection6/ES/masks/ES_densities_robusta_from_classifications_250m.tif',
-    #              '/media/olivier/olivier_ext/gedata_current/jde_coffee/MODIS/collection6/SDM/masks/SDM_densities_arabica_from_classifications_250m.tif']
+    '''
+    #GRID OPTION
+    avgWeights = ['/media/olivier/olivier_ext/gedata_current/jde_coffee/data/CER/areas/CER_area_cor.shp',
+                  '/media/olivier/olivier_ext/gedata_current/jde_coffee/data/CHA/areas/CHA_area_cor.shp',
+                  '/media/olivier/olivier_ext/gedata_current/jde_coffee/data/CO/areas/CO_area_cor.shp',
+                  '/media/olivier/olivier_ext/gedata_current/jde_coffee/data/ES/areas/ES_area_cor.shp',
+                  '/media/olivier/olivier_ext/gedata_current/jde_coffee/data/MO/areas/MO_area_cor.shp',
+                  '/media/olivier/olivier_ext/gedata_current/jde_coffee/data/SDM/areas/SDM_area_cor.shp',
+                  '/media/olivier/olivier_ext/gedata_current/jde_coffee/data/SP/areas/SP_area_cor.shp',
+                  '/media/olivier/olivier_ext/gedata_current/jde_coffee/data/ZM/areas/ZM_area_cor.shp']
     #Name of the variable with the coffee weights if using a shapefile
     #    Put None if using a raster for an area
-    weightField = ['robusta_co','arabica_co']
+    weightField = ['arabica_co','arabica_co','arabica_co','robusta_co','arabica_co','arabica_co','arabica_co','arabica_co']
+    '''
+    #RASTER OPTION
+    avgWeights = ['/media/olivier/olivier_ext/gedata_current/jde_coffee/MODIS/collection6/CER/masks/CER_densities_arabica_from_classifications_250m.tif',
+                  '/media/olivier/olivier_ext/gedata_current/jde_coffee/MODIS/collection6/CHA/masks/CHA_densities_arabica_from_classifications_250m.tif',
+                  '/media/olivier/olivier_ext/gedata_current/jde_coffee/MODIS/collection6/CO/masks/CO_densities_arabica_from_classifications_250m.tif',
+                  '/media/olivier/olivier_ext/gedata_current/jde_coffee/MODIS/collection6/ES/masks/ES_densities_robusta_from_classifications_250m.tif',
+                  '/media/olivier/olivier_ext/gedata_current/jde_coffee/MODIS/collection6/MO/masks/MO_densities_arabica_from_classifications_250m.tif',
+                  '/media/olivier/olivier_ext/gedata_current/jde_coffee/MODIS/collection6/SDM/masks/SDM_densities_arabica_from_classifications_250m.tif',
+                  '/media/olivier/olivier_ext/gedata_current/jde_coffee/MODIS/collection6/SP/masks/SP_densities_arabica_from_classifications_250m.tif',
+                  '/media/olivier/olivier_ext/gedata_current/jde_coffee/MODIS/collection6/ZM/masks/ZM_densities_arabica_from_classifications_250m.tif']
+    weightField = None
     
     #####################################################################################################################
     #####################################################################################################################
@@ -184,10 +223,6 @@ def run_script(iface):
     
     if smooth:
         print('Starting the smoothing process')
-        if not startSmooth:
-            print('The start date is necessary for the smoothing')
-            return
-        
         smoothMODIS(root=dst, regions=states, regionsIn=statesRawFolder, regionsOut=statesSmoothFolder, 
                     startSmooth=startSmooth, endSmooth=endSmooth, regWindow=regWindow, avgWindow=avgWindow, 
                     startSaveSmooth=startSaveS, endSaveSmooth=endSaveS)
@@ -476,7 +511,7 @@ def smoothMODIS(root, regions, regionsIn, regionsOut, startSmooth, endSmooth, re
         
         for xStep in range(xBlocks):
             for yStep in range(yBlocks):
-                print('   Processing block '+str(progress)+' of '+str(totBlocks))
+                print('   '+str(r)+': Processing block '+str(progress)+' of '+str(totBlocks))
                 progress += 1
                 
                 blocks = [readRasterBlock(p, xStep*BlockXSize, yStep*BlockYSize, BlockXSize, BlockYSize) for p in toProcess]
@@ -795,8 +830,17 @@ def estimateDeciles(block, nodata):
 
 def rankDatesDeciles(root, regions, varieties, regionsIn, refDecilesIn, startRank, endRank, mask, minCoffee):
     
-    startRank = datetime.strptime(startRank, '%Y-%m-%d').date()
-    endRank = datetime.strptime(endRank, '%Y-%m-%d').date()
+    #Transform into date format
+    if not startRank:
+        startRank = datetime.now() - timedelta(days=30)
+        startRank = startRank.date()
+    else:
+        startRank = datetime.strptime(startRank, '%Y-%m-%d').date()
+    if not endRank:
+        endRank = datetime.now()
+        endRank = endRank.date()
+    else:
+        endRank = datetime.strptime(endRank, '%Y-%m-%d').date()
     
     #Loop through the regions to do the ranking for each
     for r in range(len(regions)):
@@ -952,7 +996,7 @@ def computeAvgNdvi(root, regions, regionsIn, avgWeights, weightField=None, start
     
     #Transform into date format
     if not startAvg:
-        startAvg = datetime.now() - timedelta(days=183)
+        startAvg = datetime.now() - timedelta(days=365)
         startAvg = startAvg.date()
     else:
         startAvg = datetime.strptime(startAvg, '%Y-%m-%d').date()
