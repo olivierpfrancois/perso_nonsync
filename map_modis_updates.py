@@ -22,7 +22,7 @@ def run_script(iface):
     ##PARAMETERS
     
     #MODIS date to map out
-    modisDate = '2017-05-25'
+    modisDate = '2015-12-03'
     
     #% of coffee masks to map out (the rasters for each should have been prepared in advance
     modisPct = ['5','15']
@@ -32,41 +32,41 @@ def run_script(iface):
     dataPrefix = '/media/olivier/olivier_ext/gedata_current/jde_coffee/data'
     
     #Names of the States/regions to map out. There should be one entry per coffee variety if the state contains more than one
-    states = ['ES','SDM']
+    states = ['CER','CO','ES','MO','SDM','SP','ZM']
     #Coffee varieties for each of the states
-    varieties = ['robusta',
-                 'arabica'] #Coffee variety for each map
+    varieties = ['arabica','arabica','robusta','arabica','arabica','arabica','arabica'] #Coffee variety for each map
     #Titles for each of the modis maps, to which the modis date will be added at the end
-    mapTitles = ['Espirito Santo Crop Health Index \nComparison to 10y History (2006-2016) \nRobusta, ',
-                 'Sul de Minas Crop Health Index \nComparison to 10y History (2006-2016) \nArabica, ']
-    #Name of the boundary shapefile fo reach of the states
-    boundaries = ['Espirito_Santo_utm.shp', 
-                  'Sul_de_Minas.shp']
+    mapTitles = ['Centro Oeste Crop Health Index \nComparison to 10y History (2006-2016) \nArabica, ',
+                 'Cerrado Crop Health Index \nComparison to 10y History (2006-2016) \nArabica, ',
+                 'Espirito Santo Crop Health Index \nComparison to 10y History (2006-2016) \nRobusta, ',
+                 'Mogiana Crop Health Index \nComparison to 10y History (2006-2016) \nArabica, ',
+                 'Sul de Minas Crop Health Index \nComparison to 10y History (2006-2016) \nArabica, ',
+                 'Sao Paulo Crop Health Index \nComparison to 10y History (2006-2016) \nArabica, ',
+                 'Zona de Mata Crop Health Index \nComparison to 10y History (2006-2016) \nArabica, ']
+    #Name of the boundary shapefile for each of the states
+    boundaries = ['CER.shp','CO.shp','Espirito_Santo_utm.shp','MO.shp','Sul_de_Minas.shp','SP.shp','ZM.shp']
     #Name of the shapefile with the cities for each of the states
-    cities = ['ES_cities.shp',
-              'SDM_cities.shp']
-    
+    cities = ['CER_cities.shp','CO_cities.shp','ES_cities.shp','MO_cities.shp',
+              'SDM_cities.shp','SP_cities.shp','ZM_cities.shp']
     #Size of the maps for each of the states (options are 'PORTRAIT', 'LANDSCAPE' AND 'SQUARE')
-    mapSizes = ['PORTRAIT',
-                'LANDSCAPE']
-    
+    mapSizes = ['LANDSCAPE','LANDSCAPE','PORTRAIT','PORTRAIT','LANDSCAPE','LANDSCAPE','PORTRAIT']
     ###MAP BOXES Parameters
     #Parameters for the map boxes of each region
-    topX = [5,8] #x position (cm) of the top left corner of the map box
-    topY = [30,5] #y position (cm) of the top left corner of the map box
+    topX = [8,10,5,10,8,8,8] #x position (cm) of the top left corner of the map box
+    topY = [10,35,30,35,5,10,15] #y position (cm) of the top left corner of the map box
     #Size of the bottom margin below the map box. It will condition the size of the mapbox together with the top y position
-    marginBottom = [5,5]
+    marginBottom = [10,20,5,20,5,10,5]
     #Should the map box be framed?
     frameMapBox = False
     
     ###TITLE Parameters
-    titleX = [0,30] #x position (cm) of the top left corner of the title box
-    titleY = [4,4] #y position (cm) of the top left corner of the title box
-    titleHeight = [25,25] #Height (cm) of the title box
+    titleX = [-80,10,0,0,30,50,0] #x position (cm) of the top left corner of the title box
+    titleY = [4,4,4,4,4,4,4] #y position (cm) of the top left corner of the title box
+    titleHeight = [25,25,25,25,25,25,25] #Height (cm) of the title box
     
     ###LEGEND Parameters
-    legendX = [5,5] #x position (cm) of the top left corner of the legend box
-    legendY = [55,80] #y position (cm) of the top left corner of the legend box
+    legendX = [6,6,6,6,6,6,6] #x position (cm) of the top left corner of the legend box
+    legendY = [80,80,55,140,80,80,45] #y position (cm) of the top left corner of the legend box
     
     ###COMMENT BOX Parameters 
     #The comment box is set to have the same width as the legend and to be set a little below the legend
@@ -85,9 +85,9 @@ def run_script(iface):
     scaleY = 15 #How much above the bottom of the paper should the scale be
     
     #Format for export
-    exportFormat = 'PDF'
+    exportFormat = 'PNG' #'PDF'
     #Resolution for export
-    exportResolution = 300
+    exportResolution = 350
     
     # Parameters transparency for the title and legend frames. Currently not used as frames are set with no background
     itemsTransparency1 = 190
@@ -310,7 +310,8 @@ def run_script(iface):
             #####################################################
             #EXPORT THE MAP
             
-            outNm = modisPrefix+'/'+states[s]+'/'+states[s]+'_decile_comparison_'+modisDate+'_'+p+'pct.pdf' #Create name
+            #Create name
+            outNm = modisPrefix+'/'+states[s]+'/'+states[s]+'_decile_comparison_'+varieties[s]+'_'+modisDate+'_'+p+'pct.'+exportFormat.lower() 
             exportMap(c, exportFormat, outNm)
         
         #Remove raster layer (modis)

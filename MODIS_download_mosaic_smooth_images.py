@@ -12,7 +12,7 @@
 # Some commonly used imports
 
 import pymodis as pm
-import re, os
+import re, os, subprocess
 from datetime import datetime, timedelta
 from osgeo import gdal, gdalconst, ogr
 import numpy as np
@@ -39,7 +39,10 @@ def run_script(iface):
     ##REGIONS parameters
     #Regions to process inputs    !!!!SHOULD BE IN EPSG 4326 PROJECTION
     #Names of the regions (also folders names) 
-    states = ["CER","CHA","CO","ES","MO","SDM","SP","ZM"]
+    states = ["CER","CO","ES","MO","SDM","SP","ZM"]
+    #Varieties in each case
+    varieties = [['arabica'],['arabica'],['arabica','robusta'],['arabica'],['arabica'],['arabica'],['arabica','robusta']] 
+    #['arabica','arabica','arabica','robusta','arabica','arabica','arabica','arabica']
     #Addresses of the shapefiles with the boundaries for each of the regions
     statesBoundFiles = ['/media/olivier/olivier_ext/gedata_current/jde_coffee/data/'+s+'/aoi/AOI_'+s+'.shp' 
                             for s in states] #Address of the boundary files !!!!SHOULD BE IN EPSG 4326 PROJECTION
@@ -75,10 +78,11 @@ def run_script(iface):
     #Starting date for the files to mosaic
     #    If None, will default to the files that have been just downloaded if any.
     startMosaic = None
-    #startMosaic = '2017-06-01'
+    #startMosaic = '2005-01-01'
     #Ending date for the files to mosaic
     #    If None, defaults to today
     endMosaic = None
+    #endMosaic = '2005-02-01'
     
     
     ##SMOOTHING parameters
@@ -87,16 +91,16 @@ def run_script(iface):
     avgWindow = 3
     #Starting date for the files to include as input in the smoothing process
     #    If None, defaults to 1 year before today
-    startSmooth = None
+    startSmooth = '2015-03-21'
     #startSmooth = '2016-12-01'
     #Ending date for the files to include as input in the smoothing process
     #    If None, defaults to today
-    endSmooth = None
+    endSmooth = '2016-03-21'
     #Start and end dates for the files to save to the disk after smoothing
     #    If None, defaults to 6 months before today
-    startSaveS = None
+    startSaveS = '2015-03-21'
     #startSaveS = '2017-03-01' #None to save them all
-    endSaveS = None #None to save them up to the last date
+    endSaveS = '2016-03-21' #None to save them up to the last date
     
     
     ##Reference rasters parameters
@@ -107,51 +111,48 @@ def run_script(iface):
     #Mask and output model to use for the baseline rasters. 
     #The mask should overlap perfectly with the modis images
     #The output model can have a different resolution, in which case the baseline will be produced with that resolution
-    maskBaseline = ['masks/CER_densities_arabica_from_classifications_250m.tif',
-                    'masks/CHA_densities_arabica_from_classifications_250m.tif',
-                    'masks/CO_densities_arabica_from_classifications_250m.tif',
-                    'masks/ES_densities_robusta_from_classifications_250m.tif',
-                    'masks/MO_densities_arabica_from_classifications_250m.tif',
-                    'masks/SDM_densities_arabica_from_classifications_250m.tif',
-                    'masks/SP_densities_arabica_from_classifications_250m.tif',
-                    'masks/ZM_densities_arabica_from_classifications_250m.tif']
-    outModelRaster = ['masks/CER_densities_arabica_from_classifications_1km.tif',
-                      'masks/CHA_densities_arabica_from_classifications_1km.tif',
-                      'masks/CO_densities_arabica_from_classifications_1km.tif',
-                      'masks/ES_densities_robusta_from_classifications_1km.tif',
-                      'masks/MO_densities_arabica_from_classifications_1km.tif',
-                      'masks/SDM_densities_arabica_from_classifications_1km.tif',
-                      'masks/SP_densities_arabica_from_classifications_1km.tif',
-                      'masks/ZM_densities_arabica_from_classifications_1km.tif']
+    maskBaseline = [['masks/CER_densities_arabica_from_classifications_250m.tif'],
+                    ['masks/CO_densities_arabica_from_classifications_250m.tif'],
+                    ['masks/ES_densities_arabica_from_classifications_250m.tif','masks/ES_densities_robusta_from_classifications_250m.tif'],
+                    ['masks/MO_densities_arabica_from_classifications_250m.tif'],
+                    ['masks/SDM_densities_arabica_from_classifications_250m.tif'],
+                    ['masks/SP_densities_arabica_from_classifications_250m.tif'],
+                    ['masks/ZM_densities_arabica_from_classifications_250m.tif','masks/ZM_densities_robusta_from_classifications_250m.tif']]
+    outModelRaster = [['masks/CER_densities_arabica_from_classifications_1km.tif'],
+                      ['masks/CO_densities_arabica_from_classifications_1km.tif'],
+                      ['masks/ES_densities_arabica_from_classifications_1km.tif','masks/ES_densities_robusta_from_classifications_1km.tif'],
+                      ['masks/MO_densities_arabica_from_classifications_1km.tif'],
+                      ['masks/SDM_densities_arabica_from_classifications_1km.tif'],
+                      ['masks/SP_densities_arabica_from_classifications_1km.tif'],
+                      ['masks/ZM_densities_arabica_from_classifications_1km.tif','masks/ZM_densities_robusta_from_classifications_1km.tif']]
+    
     
     ##Ranking individual dates modis images in terms of deciles using the baselines
-    ranking = True
+    ranking = False
     #Starting and ending dates for the images to consider. Included
     #   If None, will default to 30 days
-    startRank = None #'2017-05-15'
+    startRank = '2015-07-15'
     #   If None, will default to today
     endRank = None
     #File to use for masking the output
-    maskRank = ['masks/CER_densities_arabica_from_classifications_1km.tif',
-                'masks/CHA_densities_arabica_from_classifications_1km.tif',
-                'masks/CO_densities_arabica_from_classifications_1km.tif',
-                'masks/ES_densities_robusta_from_classifications_1km.tif',
-                'masks/MO_densities_arabica_from_classifications_1km.tif',
-                'masks/SDM_densities_arabica_from_classifications_1km.tif',
-                'masks/SP_densities_arabica_from_classifications_1km.tif',
-                'masks/ZM_densities_arabica_from_classifications_1km.tif']
-    #Varieties in each case
-    varieties = ['arabica','arabica','arabica','robusta','arabica','arabica','arabica','arabica']
+    maskRank = [['masks/CER_densities_arabica_from_classifications_1km.tif'],
+                ['masks/CO_densities_arabica_from_classifications_1km.tif'],
+                ['masks/ES_densities_arabica_from_classifications_1km.tif','masks/ES_densities_robusta_from_classifications_1km.tif'],
+                ['masks/MO_densities_arabica_from_classifications_1km.tif'],
+                ['masks/SDM_densities_arabica_from_classifications_1km.tif'],
+                ['masks/SP_densities_arabica_from_classifications_1km.tif'],
+                ['masks/ZM_densities_arabica_from_classifications_1km.tif','masks/ZM_densities_robusta_from_classifications_1km.tif']]
     #Minimum density of coffee to consider 
     minCoffee = [0.05,0.15]
+    
     
     ##Estimate average ndvi value for each region
     avgValue = True
     #Starting and ending dates for the images to consider. Included
     #    If None, defaults to 1 year before today
-    startAvg = None #'2005-01-01'
+    startAvg = '2015-01-01'
     #    If None, will default to today
-    endAvg = None
+    endAvg = '2016-03-21'
     #Grid/Raster to use for the averaging --> FULL PATH!!!!!!!
     '''
     #GRID OPTION
@@ -168,14 +169,15 @@ def run_script(iface):
     weightField = ['arabica_co','arabica_co','arabica_co','robusta_co','arabica_co','arabica_co','arabica_co','arabica_co']
     '''
     #RASTER OPTION
-    avgWeights = ['/media/olivier/olivier_ext/gedata_current/jde_coffee/MODIS/collection6/CER/masks/CER_densities_arabica_from_classifications_250m.tif',
-                  '/media/olivier/olivier_ext/gedata_current/jde_coffee/MODIS/collection6/CHA/masks/CHA_densities_arabica_from_classifications_250m.tif',
-                  '/media/olivier/olivier_ext/gedata_current/jde_coffee/MODIS/collection6/CO/masks/CO_densities_arabica_from_classifications_250m.tif',
-                  '/media/olivier/olivier_ext/gedata_current/jde_coffee/MODIS/collection6/ES/masks/ES_densities_robusta_from_classifications_250m.tif',
-                  '/media/olivier/olivier_ext/gedata_current/jde_coffee/MODIS/collection6/MO/masks/MO_densities_arabica_from_classifications_250m.tif',
-                  '/media/olivier/olivier_ext/gedata_current/jde_coffee/MODIS/collection6/SDM/masks/SDM_densities_arabica_from_classifications_250m.tif',
-                  '/media/olivier/olivier_ext/gedata_current/jde_coffee/MODIS/collection6/SP/masks/SP_densities_arabica_from_classifications_250m.tif',
-                  '/media/olivier/olivier_ext/gedata_current/jde_coffee/MODIS/collection6/ZM/masks/ZM_densities_arabica_from_classifications_250m.tif']
+    avgWeights = [['/media/olivier/olivier_ext/gedata_current/jde_coffee/MODIS/collection6/CER/masks/CER_densities_arabica_from_classifications_250m.tif'],
+                  ['/media/olivier/olivier_ext/gedata_current/jde_coffee/MODIS/collection6/CO/masks/CO_densities_arabica_from_classifications_250m.tif'],
+                  ['/media/olivier/olivier_ext/gedata_current/jde_coffee/MODIS/collection6/ES/masks/ES_densities_arabica_from_classifications_250m.tif',
+                   '/media/olivier/olivier_ext/gedata_current/jde_coffee/MODIS/collection6/ES/masks/ES_densities_robusta_from_classifications_250m.tif'],
+                  ['/media/olivier/olivier_ext/gedata_current/jde_coffee/MODIS/collection6/MO/masks/MO_densities_arabica_from_classifications_250m.tif'],
+                  ['/media/olivier/olivier_ext/gedata_current/jde_coffee/MODIS/collection6/SDM/masks/SDM_densities_arabica_from_classifications_250m.tif'],
+                  ['/media/olivier/olivier_ext/gedata_current/jde_coffee/MODIS/collection6/SP/masks/SP_densities_arabica_from_classifications_250m.tif'],
+                  ['/media/olivier/olivier_ext/gedata_current/jde_coffee/MODIS/collection6/ZM/masks/ZM_densities_arabica_from_classifications_250m.tif',
+                   '/media/olivier/olivier_ext/gedata_current/jde_coffee/MODIS/collection6/ZM/masks/ZM_densities_robusta_from_classifications_250m.tif']]
     weightField = None
     
     #####################################################################################################################
@@ -229,7 +231,7 @@ def run_script(iface):
     
     if createBaselines:
         print('Starting creation of baselines')
-        createBaseline(root=dst, regions=states, regionsIn=statesSmoothFolder, regionsOut=statesRefFolder, 
+        createBaseline(root=dst, regions=states, varieties=varieties, regionsIn=statesSmoothFolder, regionsOut=statesRefFolder, 
                        startRef=startRef, endRef=endRef, mask=maskBaseline, outModelRaster=outModelRaster)
     
     if ranking:
@@ -240,7 +242,7 @@ def run_script(iface):
 
     if avgValue:
         print('Computing the average ndvi value for each zone')
-        computeAvgNdvi(root=dst, regions=states, regionsIn=statesSmoothFolder, avgWeights=avgWeights, 
+        computeAvgNdvi(root=dst, regions=states, varieties=varieties, regionsIn=statesSmoothFolder, avgWeights=avgWeights, 
                        weightField=weightField, startAvg=startAvg, endAvg=endAvg)
 
 
@@ -408,9 +410,13 @@ def mosaicMODIS(root, srcFolder, tmpFolder, regions, regionsOut, regionsBoundari
             #Crop the mosaic and mask the raster
             inRaster = root+'/'+tmpFolder+'/'+outName
             outRaster = root+'/'+s+'/'+regionsOut+'/'+outName
-            cmd = 'gdalwarp -q -cutline %s -crop_to_cutline %s %s' % (shp, inRaster, outRaster)
-            os.system(cmd)
-        
+            #Call gdalwarp using the os system command
+            #cmd = 'gdalwarp -q -cutline %s -crop_to_cutline %s %s' % (shp, inRaster, outRaster)
+            #os.system(cmd)
+            #Call gdalwarp using the subprocess command
+            out = subprocess.call(['/usr/bin/gdalwarp', '-q', '-overwrite', '-cutline', shp, '-crop_to_cutline', inRaster, outRaster])
+            print(out)
+            
         #Remove the .xml, .hdf and .vrt intermediary files
         xml = [f for f in os.listdir(os.path.join(root,tmpFolder)) if f.endswith('.xml') or 
                     f.endswith('.hdf') or f.endswith('.vrt') or f.endswith('.tif')]
@@ -679,7 +685,7 @@ def smoothingSwets(block, regWindow, avgWindow, nodata=None):
 
 
 
-def createBaseline(root, regions, regionsIn, regionsOut, startRef, endRef, mask=None, outModelRaster=None):
+def createBaseline(root, regions, varieties, regionsIn, regionsOut, startRef, endRef, mask=None, outModelRaster=None):
     #Loop through the regions
     for r in range(len(regions)):
         #Get the names of all the smoothed rasters on file
@@ -696,105 +702,106 @@ def createBaseline(root, regions, regionsIn, regionsOut, startRef, endRef, mask=
         days = [int(d) for d in days]
         days.sort()
         
-        #Loop through the dates to create a baseline raster for each
-        for d in days:
-            #Get the names of all the rasters for this date
-            dates = [datetime.strptime('0101'+str(y), '%d%m%Y').date()+timedelta(days=d-1) for y in range(startRef,endRef+1,1)]
-            files = [f for f,date in zip(onDisk,datesAll) if date in dates]
-            
-            #Import all the images to use for estimating the deciles
-            if outModelRaster:
-                '''
-                #Create an empty raster in memory with the wanted resolution
-                base = gdal.Open(os.path.join(root,regions[r],regionsIn,files[0]))
-                projection = base.GetProjection()
-                geotransform = base.GetGeoTransform()
-                extentX = base.rasterXSize*geotransform[1]
-                extentY = base.regions[r]asterYSIze*geotransform[5]
-                #Change the resolution to what is wanted
-                geotransform[1] = outResolution[0]
-                geotransform[5] = outResolution[1]
-                ncols = int(round(extentX/outResolution[0]))
-                nrows = int(round(extentY/outResolution[1]))
-                #Create the empty raster
-                driver = gdal.GetDriverByName('MEM')
-                templateRes = driver.Create('', ncols, nrows, 1, gdal.GDT_Byte)
-                templateRes.SetGeoTransform(geotransform)
-                templateRes.SetProjection(projection)
-                base = None
-                '''
-                if mask:
-                    #I need to mask the rasters first to only have the coffee pixels when I change the resolution
-                    #Import the mask raster as an array
-                    p = gdal.Open(os.path.join(root,regions[r],mask[r]))
-                    nanMask = p.GetRasterBand(1).ReadAsArray()
-                    #Transform all the non zero values to nan
-                    nanMask = np.logical_or(nanMask == 0, np.isnan(nanMask))
+        for v in range(len(varieties[r])):
+            #Loop through the dates to create a baseline raster for each
+            for d in days:
+                #Get the names of all the rasters for this date
+                dates = [datetime.strptime('0101'+str(y), '%d%m%Y').date()+timedelta(days=d-1) for y in range(startRef,endRef+1,1)]
+                files = [f for f,date in zip(onDisk,datesAll) if date in dates]
                 
-                #Mask the rasters
-                toProcess = []
-                for f in files:
-                    p = gdal.Open(os.path.join(root,regions[r],regionsIn,f))
-                    pBand = p.GetRasterBand(1).ReadAsArray()
-                    if mask:
-                        pBand[nanMask] = np.nan
+                #Import all the images to use for estimating the deciles
+                if outModelRaster and outModelRaster[r]:
+                    '''
+                    #Create an empty raster in memory with the wanted resolution
+                    base = gdal.Open(os.path.join(root,regions[r],regionsIn,files[0]))
+                    projection = base.GetProjection()
+                    geotransform = base.GetGeoTransform()
+                    extentX = base.rasterXSize*geotransform[1]
+                    extentY = base.regions[r]asterYSIze*geotransform[5]
+                    #Change the resolution to what is wanted
+                    geotransform[1] = outResolution[0]
+                    geotransform[5] = outResolution[1]
+                    ncols = int(round(extentX/outResolution[0]))
+                    nrows = int(round(extentY/outResolution[1]))
+                    #Create the empty raster
+                    driver = gdal.GetDriverByName('MEM')
+                    templateRes = driver.Create('', ncols, nrows, 1, gdal.GDT_Byte)
+                    templateRes.SetGeoTransform(geotransform)
+                    templateRes.SetProjection(projection)
+                    base = None
+                    '''
+                    if mask and mask[r]:
+                        #I need to mask the rasters first to only have the coffee pixels when I change the resolution
+                        #Import the mask raster as an array
+                        p = gdal.Open(os.path.join(root,regions[r],mask[r][v]))
+                        nanMask = p.GetRasterBand(1).ReadAsArray()
+                        #Transform all the non zero values to nan
+                        nanMask = np.logical_or(nanMask == 0, np.isnan(nanMask))
+                    
+                    #Mask the rasters
+                    toProcess = []
+                    for f in files:
+                        p = gdal.Open(os.path.join(root,regions[r],regionsIn,f))
+                        pBand = p.GetRasterBand(1).ReadAsArray()
+                        if mask and mask[r]:
+                            pBand[nanMask] = np.nan
+                            
+                        toProcess.append(new_raster_from_base(p, '', 'MEM', np.nan, gdal.GDT_Float32, bands=1))
+                        toProcess[-1].GetRasterBand(1).WriteArray(pBand)
+                    p = None
+                    pBand = None
+                    
+                    #Change the resolution of the rasters
+                    outModel = gdal.Open(os.path.join(root,regions[r],outModelRaster[r][v]))
+                    toProcess = [warp_raster(p, outModel, resampleOption='average', outputURI=None, outFormat='MEM') 
+                                 for p in toProcess]
+                else:
+                    #Import the images
+                    toProcess = [gdal.Open(os.path.join(root,regions[r],regionsIn,f)) for f in files]
+                    
+                #Get the no data value if any
+                nodata = toProcess[0].GetRasterBand(1).GetNoDataValue()
+                
+                #Create an empty copy with 10 layers to use for storing the deciles
+                outname = 'ndvi_deciles_0to100pct_ref_period-'+str(startRef)+'-'+str(endRef)+'_day'+str(d)+'_date-'+dates[0].strftime('%b-%d')+'_'+varieties[r][v]+'.tif'
+                processed = new_raster_from_base(toProcess[0], root+'/'+regions[r]+'/'+regionsOut+'/'+outname, 'GTiff', np.nan, gdal.GDT_Float32, bands=10)
+                
+                #Get the size of the rasters to identify the limits of the blocks to loop through
+                band = toProcess[1].GetRasterBand(1)
+                #Get the size of the raster
+                xsize = band.XSize
+                ysize = band.YSize
+                #Set the block size
+                BlockXSize = 256
+                BlockYSize = 256
+                #Get the number of blocks in x and y directions
+                xBlocks = int(round(xsize/BlockXSize)) + 1
+                yBlocks = int(round(ysize/BlockYSize)) + 1
+                
+                for xStep in range(xBlocks):
+                    for yStep in range(yBlocks):
+                    
+                        block = [readRasterBlock(p, xStep*BlockXSize, yStep*BlockYSize, BlockXSize, BlockYSize) for p in toProcess]
                         
-                    toProcess.append(new_raster_from_base(p, '', 'MEM', np.nan, gdal.GDT_Float32, bands=1))
-                    toProcess[-1].GetRasterBand(1).WriteArray(pBand)
-                p = None
-                pBand = None
+                        #Bring the blocks together into one single array
+                        block = np.dstack(block)
+                        #Recast the type
+                        block = block.astype(np.float32)
+                        
+                        #Estimate the deciles for each pixel
+                        deciles = estimateDeciles(block, nodata)
+                        
+                        #Change the values in the output raster
+                        deciles = np.dsplit(deciles, 10)
+                        for i in range(10):
+                            processed.GetRasterBand(i+1).WriteArray(deciles[i][:,:,0], xStep*BlockXSize, yStep*BlockYSize)
                 
-                #Change the resolution of the rasters
-                outModel = gdal.Open(os.path.join(root,regions[r],outModelRaster[r]))
-                toProcess = [warp_raster(p, outModel, resampleOption='average', outputURI=None, outFormat='MEM') 
-                             for p in toProcess]
-            else:
-                #Import the images
-                toProcess = [gdal.Open(os.path.join(root,regions[r],regionsIn,f)) for f in files]
-                
-            #Get the no data value if any
-            nodata = toProcess[0].GetRasterBand(1).GetNoDataValue()
-            
-            #Create an empty copy with 10 layers to use for storing the deciles
-            outname = 'ndvi_deciles_0to100pct_ref_period-'+str(startRef)+'-'+str(endRef)+'_day'+str(d)+'_date-'+dates[0].strftime('%b-%d')+'.tif'
-            processed = new_raster_from_base(toProcess[0], root+'/'+regions[r]+'/'+regionsOut+'/'+outname, 'GTiff', np.nan, gdal.GDT_Float32, bands=10)
-            
-            #Get the size of the rasters to identify the limits of the blocks to loop through
-            band = toProcess[1].GetRasterBand(1)
-            #Get the size of the raster
-            xsize = band.XSize
-            ysize = band.YSize
-            #Set the block size
-            BlockXSize = 256
-            BlockYSize = 256
-            #Get the number of blocks in x and y directions
-            xBlocks = int(round(xsize/BlockXSize)) + 1
-            yBlocks = int(round(ysize/BlockYSize)) + 1
-            
-            for xStep in range(xBlocks):
-                for yStep in range(yBlocks):
-                
-                    block = [readRasterBlock(p, xStep*BlockXSize, yStep*BlockYSize, BlockXSize, BlockYSize) for p in toProcess]
-                    
-                    #Bring the blocks together into one single array
-                    block = np.dstack(block)
-                    #Recast the type
-                    block = block.astype(np.float32)
-                    
-                    #Estimate the deciles for each pixel
-                    deciles = estimateDeciles(block, nodata)
-                    
-                    #Change the values in the output raster
-                    deciles = np.dsplit(deciles, 10)
-                    for i in range(10):
-                        processed.GetRasterBand(i+1).WriteArray(deciles[i][:,:,0], xStep*BlockXSize, yStep*BlockYSize)
-            
-            #Close the rasters
-            for p in toProcess:
-                p.FlushCache()
-                p = None
-            processed.FlushCache()
-            processed = None
+                #Close the rasters
+                for p in toProcess:
+                    p.FlushCache()
+                    p = None
+                processed.FlushCache()
+                processed = None
     
 def estimateDeciles(block, nodata):
     extent = block.shape
@@ -860,87 +867,88 @@ def rankDatesDeciles(root, regions, varieties, regionsIn, refDecilesIn, startRan
         onDisk.sort(key=dict(zip(onDisk, datesAll)).get) #Sort by date
         
         #Transform into days from start of the year and keep only the unique values
-        days = [d.strftime('%j') for d in datesAll]
+        days = [int(d.strftime('%j')) for d in datesAll]
         
         #Get the names of the decile baselines on disk
         baseFiles = [f for f in os.listdir(os.path.join(root,regions[r],refDecilesIn)) if f.endswith('.tif')]
         
-        #Import the mask
-        nanMask = gdal.Open(os.path.join(root,regions[r],mask[r]))
-        
-        #Loop through the days to rank each date
-        for day, date, fileS in zip(days,datesAll,onDisk):
-            #Import the smoothed image
-            smoothImg = gdal.Open(os.path.join(root,regions[r],regionsIn,fileS))
+        for v in range(len(varieties)):
+            #Import the mask
+            nanMask = gdal.Open(os.path.join(root,regions[r],mask[r][v]))
             
-            nodata = smoothImg.GetRasterBand(1).GetNoDataValue()
-            
-            #Import the decile baseline
-            baseFile = [f for f in baseFiles if 'day'+str(day) in f]
-            baseImg = gdal.Open(os.path.join(root,regions[r],refDecilesIn,baseFile[0]))
-            
-            #Adapt the resolution of the smooth images to the baseline if needed
-            geoSmooth = smoothImg.GetGeoTransform()
-            geoBase = baseImg.GetGeoTransform()
-            reproject = [1 for a,b in zip(geoSmooth,geoBase) if not a==b]
-            if reproject:
-                smoothImg = warp_raster(smoothImg, baseImg, resampleOption='average', outputURI=None, outFormat='MEM')
-            
-            #Get the size of the rasters to identify the limits of the blocks to loop through
-            band = baseImg.GetRasterBand(1)
-            #Get the size of the raster
-            xsize = band.XSize
-            ysize = band.YSize
-            #Set the block size
-            BlockXSize = 256
-            BlockYSize = 256
-            #Get the number of blocks in x and y directions
-            xBlocks = int(round(xsize/BlockXSize)) + 1
-            yBlocks = int(round(ysize/BlockYSize)) + 1
-            band=None
-            
-            for m in minCoffee:
-                #Create an empty copy for storing the deciles comparisons
-                outname = 'ndvi_'+date.strftime('%Y-%m-%d')+'_CompareToDecile_0BelowMin_110AboveMax_maskedbelow'+str(int(m*100))+'%'+varieties[r]+'.tif'
-                processed = new_raster_from_base(baseImg, root+'/'+regions[r]+'/'+outname, 'GTiff', -32768, gdal.GDT_Int16, bands=1)
+            #Loop through the days to rank each date
+            for day, date, fileS in zip(days,datesAll,onDisk):
+                #Import the smoothed image
+                smoothImg = gdal.Open(os.path.join(root,regions[r],regionsIn,fileS))
                 
-                for xStep in range(xBlocks):
-                    for yStep in range(yBlocks):
-                        
-                        #Read the block from the images
-                        blockSmooth = readRasterBlock(smoothImg, xStep*BlockXSize, yStep*BlockYSize, BlockXSize, BlockYSize)
-                        
-                        blockBase = [readRasterBlock(baseImg, xStep*BlockXSize, yStep*BlockYSize, BlockXSize, BlockYSize, band=b+1) 
-                                     for b in range(baseImg.RasterCount)]
-                        
-                        #Read the block from the mask 
-                        blockMask = readRasterBlock(nanMask, xStep*BlockXSize, yStep*BlockYSize, BlockXSize, BlockYSize)
-                        blockMask = blockMask < m
-                        
-                        #Bring the blocks together into one single array
-                        blockBase = np.dstack(blockBase)
-                        
-                        #Apply the mask
-                        blockSmooth[blockMask] = np.nan
-                        blockBase[blockMask] = np.nan
-                        
-                        #Recast the type to be sure
-                        blockSmooth = blockSmooth.astype(np.float32)
-                        blockBase = blockBase.astype(np.float32)
+                nodata = smoothImg.GetRasterBand(1).GetNoDataValue()
+                
+                #Import the decile baseline
+                baseFile = [f for f in baseFiles if 'day'+str(day)+'_' and varieties[r][v] in f]
+                baseImg = gdal.Open(os.path.join(root,regions[r],refDecilesIn,baseFile[0]))
+                
+                #Adapt the resolution of the smooth images to the baseline if needed
+                geoSmooth = smoothImg.GetGeoTransform()
+                geoBase = baseImg.GetGeoTransform()
+                reproject = [1 for a,b in zip(geoSmooth,geoBase) if not a==b]
+                if reproject:
+                    smoothImg = warp_raster(smoothImg, baseImg, resampleOption='average', outputURI=None, outFormat='MEM')
+                
+                #Get the size of the rasters to identify the limits of the blocks to loop through
+                band = baseImg.GetRasterBand(1)
+                #Get the size of the raster
+                xsize = band.XSize
+                ysize = band.YSize
+                #Set the block size
+                BlockXSize = 256
+                BlockYSize = 256
+                #Get the number of blocks in x and y directions
+                xBlocks = int(round(xsize/BlockXSize)) + 1
+                yBlocks = int(round(ysize/BlockYSize)) + 1
+                band=None
+                
+                for m in minCoffee:
+                    #Create an empty copy for storing the deciles comparisons
+                    outname = 'ndvi_'+date.strftime('%Y-%m-%d')+'_CompareToDecile_0BelowMin_110AboveMax_maskedbelow'+str(int(m*100))+'%'+varieties[r][v]+'.tif'
+                    processed = new_raster_from_base(baseImg, root+'/'+regions[r]+'/'+outname, 'GTiff', -32768, gdal.GDT_Int16, bands=1)
                     
-                        #Estimate the placement for each pixel
-                        ranks = estimateRank(block=blockSmooth, ref=blockBase, nodata=nodata)
+                    for xStep in range(xBlocks):
+                        for yStep in range(yBlocks):
+                            
+                            #Read the block from the images
+                            blockSmooth = readRasterBlock(smoothImg, xStep*BlockXSize, yStep*BlockYSize, BlockXSize, BlockYSize)
+                            
+                            blockBase = [readRasterBlock(baseImg, xStep*BlockXSize, yStep*BlockYSize, BlockXSize, BlockYSize, band=b+1) 
+                                         for b in range(baseImg.RasterCount)]
+                            
+                            #Read the block from the mask 
+                            blockMask = readRasterBlock(nanMask, xStep*BlockXSize, yStep*BlockYSize, BlockXSize, BlockYSize)
+                            blockMask = blockMask < m
+                            
+                            #Bring the blocks together into one single array
+                            blockBase = np.dstack(blockBase)
+                            
+                            #Apply the mask
+                            blockSmooth[blockMask] = np.nan
+                            blockBase[blockMask] = np.nan
+                            
+                            #Recast the type to be sure
+                            blockSmooth = blockSmooth.astype(np.float32)
+                            blockBase = blockBase.astype(np.float32)
                         
-                        #Change the values in the output raster
-                        processed.GetRasterBand(1).WriteArray(ranks, xStep*BlockXSize, yStep*BlockYSize)
-            
-            #Close the rasters
-            smoothImg.FlushCache()
-            smoothImg = None
-            baseImg.FlushCache()
-            baseImg = None
-            processed.FlushCache()
-            processed = None
+                            #Estimate the placement for each pixel
+                            ranks = estimateRank(block=blockSmooth, ref=blockBase, nodata=nodata)
+                            
+                            #Change the values in the output raster
+                            processed.GetRasterBand(1).WriteArray(ranks, xStep*BlockXSize, yStep*BlockYSize)
+                
+                #Close the rasters
+                smoothImg.FlushCache()
+                smoothImg = None
+                baseImg.FlushCache()
+                baseImg = None
+                processed.FlushCache()
+                processed = None
 
 def estimateRank(block, ref, nodata):
     extent = block.shape
@@ -992,7 +1000,7 @@ def estimateRank(block, ref, nodata):
 
 
 
-def computeAvgNdvi(root, regions, regionsIn, avgWeights, weightField=None, startAvg=None, endAvg=None, alltouch=False):
+def computeAvgNdvi(root, regions, varieties, regionsIn, avgWeights, weightField=None, startAvg=None, endAvg=None, alltouch=False):
     
     #Transform into date format
     if not startAvg:
@@ -1007,138 +1015,154 @@ def computeAvgNdvi(root, regions, regionsIn, avgWeights, weightField=None, start
         endAvg = datetime.strptime(endAvg, '%Y-%m-%d').date()
     
     #Create an empty dictionary to get the values for each of the regions
-    averages = []
+    averages = {}
+    colnames = []
     
     for r in range(len(regions)):
-        if not avgWeights[r]:
-            continue
-        
-        #Get the images to consider
-        print('Averaging region '+str(regions[r])+'...')
-        
-        #Import all the smooth modis images on disk
-        onDisk = [f for f in os.listdir(os.path.join(root,regions[r],regionsIn)) if f.endswith('.tif')]
-        
-        #Dates of these files
-        datesAll = [re.search('_([0-9]{4}-[0-9]{2}-[0-9]{2})', f).group(1) for f in onDisk]
-        #Transform into date format
-        datesAll = [datetime.strptime(d, '%Y-%m-%d').date() for d in datesAll]
-        
-        #Keep only the files and dates within the dates to process
-        onDisk = [f for f,d in zip(onDisk,datesAll) if d >= startAvg and d <= endAvg]
-        datesAll = [d for d in datesAll if d >= startAvg and d <= endAvg]
-        
-        if not onDisk:
-            print('no modis images to process in '+regions[r])
-            continue
-        
-        #Get a base image as a reference for format
-        baseImg = gdal.Open(os.path.join(root,regions[r],regionsIn,onDisk[0]))
-        
-        #Rasterize the gridded weights if needed or simply import it
-        if avgWeights[r].endswith('.shp'):
-            if not weightField[r]:
-                print('The name of the field with the densities needs to be specified to average')
-                break
+        for v in range(len(varieties[r])):
+            if not avgWeights[r][v]:
+                continue
             
-            #Import the vector layer
-            #Open the shapefile
-            driver = ogr.GetDriverByName('ESRI Shapefile')
-            dataSource = driver.Open(avgWeights[r], 0) # 0 means read-only. 1 means writeable.
-        
-            # Create layer
-            inVecLayer = dataSource.GetLayer(0)
-                                    
-            # Prepare an empty raster to rasterize the shapefile
-            weightsRaster = new_raster_from_base(baseImg, 'temp', 'MEM', -1, gdal.GDT_Float32) 
+            colnames.append(regions[r]+'_'+varieties[r][v])
             
-            #Transform alltouch
-            if alltouch:
-                alltouch = 'TRUE'
-            else:
-                alltouch = 'FALSE'
-        
-            # Rasterize the vector layer:
-            gdal.RasterizeLayer(weightsRaster, [1], inVecLayer, options=['ALL_TOUCHED='+alltouch, 'ATTRIBUTE='+weightField[r]])
+            #Get the images to consider
+            print('Averaging region '+str(regions[r])+'...')
             
-            inVecLayer = None
+            #Import all the smooth modis images on disk
+            onDisk = [f for f in os.listdir(os.path.join(root,regions[r],regionsIn)) if f.endswith('.tif')]
             
-        elif avgWeights[r].endswith(('.tif','.TIF')):
-            weightsRaster = gdal.Open(avgWeights[r])
+            #Dates of these files
+            datesAll = [re.search('_([0-9]{4}-[0-9]{2}-[0-9]{2})', f).group(1) for f in onDisk]
+            #Transform into date format
+            datesAll = [datetime.strptime(d, '%Y-%m-%d').date() for d in datesAll]
             
-            #Change the resolution of the raster to match the images if needed
+            #Keep only the files and dates within the dates to process
+            onDisk = [f for f,d in zip(onDisk,datesAll) if d >= startAvg and d <= endAvg]
+            datesAll = [d for d in datesAll if d >= startAvg and d <= endAvg]
             
-            geoSmooth = weightsRaster.GetGeoTransform()
-            geoBase = baseImg.GetGeoTransform()
-            reproject = [1 for a,b in zip(geoSmooth,geoBase) if not a==b]
-            if reproject:
-                weightsRaster = warp_raster(weightsRaster, baseImg, resampleOption='nearest', outputURI=None, outFormat='MEM')
-        
-        baseImg = None
-        nodataWeights = weightsRaster.GetRasterBand(1).GetNoDataValue()
-        
-        #Loop through the images to compute the average for each
-        for img, date in zip(onDisk,datesAll):
-            #Import the image
-            baseImg = gdal.Open(os.path.join(root,regions[r],regionsIn,img))
+            if not onDisk:
+                print('no modis images to process in '+regions[r])
+                continue
             
-            #Loop through the blocks to compute the average for each
+            #Get a base image as a reference for format
+            baseImg = gdal.Open(os.path.join(root,regions[r],regionsIn,onDisk[0]))
             
-            #Get the size of the rasters to identify the limits of the blocks to loop through
-            band = baseImg.GetRasterBand(1)
-            #Get the no data value
-            nodataBase = band.GetNoDataValue()
-            #Get the size of the raster
-            xsize = band.XSize
-            ysize = band.YSize
-            #Set the block size
-            BlockXSize = 256
-            BlockYSize = 256
-            #Get the number of blocks in x and y directions
-            xBlocks = int(round(xsize/BlockXSize)) + 1
-            yBlocks = int(round(ysize/BlockYSize)) + 1
-            band=None
-            
-            sumNdvi = []
-            sumWeights = []
-            
-            for xStep in range(xBlocks):
-                for yStep in range(yBlocks):
-                    
-                    #Read the block from the image
-                    blockBase = readRasterBlock(baseImg, xStep*BlockXSize, yStep*BlockYSize, BlockXSize, BlockYSize)
-                    
-                    #Read the block from the weights
-                    blockWeight = readRasterBlock(weightsRaster, xStep*BlockXSize, yStep*BlockYSize, BlockXSize, BlockYSize)
-                    
-                    #Recast the type to be sure
-                    blockBase = blockBase.astype(np.float32)
-                    blockWeight = blockWeight.astype(np.float32)
-                    
-                    #Replace the no data values by 0
-                    blockBase[np.logical_or(np.logical_or(blockBase == nodataBase,np.isnan(blockBase)),np.logical_or(blockBase>1,blockBase<-1))] = 0.
-                    blockWeight[np.logical_or(np.logical_or(blockWeight == nodataWeights,np.isnan(blockWeight)),np.logical_or(blockWeight>1,blockWeight<0))] = 0.
+            #Rasterize the gridded weights if needed or simply import it
+            if avgWeights[r][v].endswith('.shp'):
+                if not weightField[r][v]:
+                    print('The name of the field with the densities needs to be specified to average')
+                    break
                 
-                    #Estimate the weighted sum for each pixel
-                    sumNdvi.append(np.sum(np.multiply(blockBase,blockWeight)))
-                    sumWeights.append(np.sum(blockWeight))
-                    
-            #Combine for the entire image
-            sumNdvi = np.sum(sumNdvi)/np.sum(sumWeights)
-            #Transform into per Hectare
-            sumNdvi = sumNdvi/(250)*10000 
+                #Import the vector layer
+                #Open the shapefile
+                driver = ogr.GetDriverByName('ESRI Shapefile')
+                dataSource = driver.Open(avgWeights[r][v], 0) # 0 means read-only. 1 means writeable.
             
-            #Add to the output dictionary along with the date and region as a dictionary
-            averages.append({'region':regions[r],'date':date,'ndviPerHa':sumNdvi})
+                # Create layer
+                inVecLayer = dataSource.GetLayer(0)
+                                        
+                # Prepare an empty raster to rasterize the shapefile
+                weightsRaster = new_raster_from_base(baseImg, 'temp', 'MEM', -1, gdal.GDT_Float32) 
+                
+                #Transform alltouch
+                if alltouch:
+                    alltouch = 'TRUE'
+                else:
+                    alltouch = 'FALSE'
+            
+                # Rasterize the vector layer:
+                gdal.RasterizeLayer(weightsRaster, [1], inVecLayer, options=['ALL_TOUCHED='+alltouch, 'ATTRIBUTE='+weightField[r][v]])
+                
+                inVecLayer = None
+                
+            elif avgWeights[r][v].endswith(('.tif','.TIF')):
+                weightsRaster = gdal.Open(avgWeights[r][v])
+                
+                #Change the resolution of the raster to match the images if needed
+                
+                geoSmooth = weightsRaster.GetGeoTransform()
+                geoBase = baseImg.GetGeoTransform()
+                reproject = [1 for a,b in zip(geoSmooth,geoBase) if not a==b]
+                if reproject:
+                    weightsRaster = warp_raster(weightsRaster, baseImg, resampleOption='nearest', outputURI=None, outFormat='MEM')
+            
+            baseImg = None
+            nodataWeights = weightsRaster.GetRasterBand(1).GetNoDataValue()
+            
+            #Loop through the images to compute the average for each
+            for img, date in zip(onDisk,datesAll):
+                #Import the image
+                baseImg = gdal.Open(os.path.join(root,regions[r],regionsIn,img))
+                
+                #Loop through the blocks to compute the average for each
+                
+                #Get the size of the rasters to identify the limits of the blocks to loop through
+                band = baseImg.GetRasterBand(1)
+                #Get the no data value
+                nodataBase = band.GetNoDataValue()
+                #Get the size of the raster
+                xsize = band.XSize
+                ysize = band.YSize
+                #Set the block size
+                BlockXSize = 256
+                BlockYSize = 256
+                #Get the number of blocks in x and y directions
+                xBlocks = int(round(xsize/BlockXSize)) + 1
+                yBlocks = int(round(ysize/BlockYSize)) + 1
+                band=None
+                
+                sumNdvi = []
+                sumWeights = []
+                
+                for xStep in range(xBlocks):
+                    for yStep in range(yBlocks):
+                        
+                        #Read the block from the image
+                        blockBase = readRasterBlock(baseImg, xStep*BlockXSize, yStep*BlockYSize, BlockXSize, BlockYSize)
+                        
+                        #Read the block from the weights
+                        blockWeight = readRasterBlock(weightsRaster, xStep*BlockXSize, yStep*BlockYSize, BlockXSize, BlockYSize)
+                        
+                        #Recast the type to be sure
+                        blockBase = blockBase.astype(np.float32)
+                        blockWeight = blockWeight.astype(np.float32)
+                        
+                        #Replace the no data values by 0
+                        blockBase[np.logical_or(np.logical_or(blockBase == nodataBase,np.isnan(blockBase)),np.logical_or(blockBase>1,blockBase<-1))] = 0.
+                        blockWeight[np.logical_or(np.logical_or(blockWeight == nodataWeights,np.isnan(blockWeight)),np.logical_or(blockWeight>1,blockWeight<0))] = 0.
+                    
+                        #Estimate the weighted sum for each pixel
+                        sumNdvi.append(np.sum(np.multiply(blockBase,blockWeight)))
+                        sumWeights.append(np.sum(blockWeight))
+                        
+                #Combine for the entire image
+                sumNdvi = np.sum(sumNdvi)/np.sum(sumWeights)
+                #Transform into per Hectare
+                sumNdvi = sumNdvi/(250)*10000 
+                
+                #Add to the output dictionary along with the date and region as a dictionary
+                #averages.append({'region':regions[r],'date':date,'ndviPerHa':sumNdvi})
+                if date.strftime('%Y-%m-%d') in averages:
+                    averages[date.strftime('%Y-%m-%d')][regions[r]+'_'+varieties[r][v]] = sumNdvi
+                else:
+                    averages[date.strftime('%Y-%m-%d')] = {}
+                    averages[date.strftime('%Y-%m-%d')]['date'] = date.strftime('%Y-%m-%d')
+                    averages[date.strftime('%Y-%m-%d')][regions[r]+'_'+varieties[r][v]] = sumNdvi
             
     #Export the dictionary
     outNm = 'Weighted_avg_ndvi_'+startAvg.strftime('%Y-%m-%d')+'_'+endAvg.strftime('%Y-%m-%d')+'.txt'
+    #Sort the dates
+    datesAll.sort()
+    #order the output by date in a list. Each element is an element of the original dictionary and will be exported
+    out = []
+    for date in datesAll:
+        out.append(averages[date.strftime('%Y-%m-%d')])
     with open(os.path.join(root,outNm), "w") as f:
-        dict_writer = DictWriter(f, ['region','date','ndviPerHa'], extrasaction='ignore', delimiter="\t", restval="0")
+        dict_writer = DictWriter(f, ['date']+colnames, extrasaction='ignore', delimiter="\t", restval="0")
         dict_writer.writeheader()
-        for p in averages:
+        for p in out:
             dict_writer.writerow(p)
-        
+
 
 def warp_raster(src, dst, resampleOption='nearest', outputURI=None, outFormat='MEM'):
     """
