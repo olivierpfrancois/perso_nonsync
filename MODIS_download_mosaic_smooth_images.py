@@ -29,7 +29,9 @@ def run_script(iface):
     
     ##DIRECTORIES parameters
     #Working directory
-    dst = '/media/olivier/olivier_ext/gedata_current/jde_coffee/MODIS/collection6' #'D:/gedata_current/jde_coffee/MODIS'
+    dst = '/media/olivier/olivier_ext/gedata_current/jde_coffee/MODIS/collection6' #'E:/gedata_current/jde_coffee/MODIS/collection6'
+    #Directory data sources
+    origin = '/media/olivier/olivier_ext/gedata_current/jde_coffee/data' #'E:/gedata_current/jde_coffee/data'
     #Folder to use for temporary files (should be empty)
     tempDir = 'Temp'
     #Destination folder for the download
@@ -39,12 +41,12 @@ def run_script(iface):
     ##REGIONS parameters
     #Regions to process inputs    !!!!SHOULD BE IN EPSG 4326 PROJECTION
     #Names of the regions (also folders names) 
-    states = ['MO','SDM'] #["CER","CO","ES","MO","SDM","SP","ZM"]
+    states = ['SP','ZM'] #["CER","CO","ES","MO","SDM","SP","ZM"]
     #Varieties in each case
     varieties = [['arabica'],['arabica'],['arabica','robusta'],['arabica'],['arabica'],['arabica'],['arabica','robusta']]
     #Addresses of the shapefiles with the boundaries for each of the regions
-    statesBoundFiles = ['/media/olivier/olivier_ext/gedata_current/jde_coffee/data/'+s+'/aoi/AOI_'+s+'.shp' 
-                            for s in states] #Address of the boundary files !!!!SHOULD BE IN EPSG 4326 PROJECTION
+    #Address of the boundary files !!!!SHOULD BE IN EPSG 4326 PROJECTION
+    statesBoundFiles = [origin+s+'/aoi/AOI_'+s+'.shp' for s in states] 
     #Name of subfolder where to save the raw mosaic data (should be in the folders of the regions)
     statesRawFolder = 'raw_data'
     #Name of subfolder where to save the smoothed mosaic data (should be in the folders of the regions)
@@ -54,7 +56,7 @@ def run_script(iface):
     
         
     ##DOWNLOAD parameters
-    dload = True
+    dload = False
     #Product to download
     product = 'MOD13Q1.006'
     #Username for the earthdata website
@@ -73,7 +75,7 @@ def run_script(iface):
     
     ##MOSAIC parameters
     #Should the downloaded files be mosaiced for each of the regions?
-    mosaic = True
+    mosaic = False
     #Starting date for the files to mosaic
     #    If None, will default to the files that have been just downloaded if any.
     startMosaic = None
@@ -155,28 +157,28 @@ def run_script(iface):
     #Grid/Raster to use for the averaging --> FULL PATH!!!!!!!
     '''
     #GRID OPTION
-    avgWeights = ['/media/olivier/olivier_ext/gedata_current/jde_coffee/data/CER/areas/CER_area_cor.shp',
-                  '/media/olivier/olivier_ext/gedata_current/jde_coffee/data/CHA/areas/CHA_area_cor.shp',
-                  '/media/olivier/olivier_ext/gedata_current/jde_coffee/data/CO/areas/CO_area_cor.shp',
-                  '/media/olivier/olivier_ext/gedata_current/jde_coffee/data/ES/areas/ES_area_cor.shp',
-                  '/media/olivier/olivier_ext/gedata_current/jde_coffee/data/MO/areas/MO_area_cor.shp',
-                  '/media/olivier/olivier_ext/gedata_current/jde_coffee/data/SDM/areas/SDM_area_cor.shp',
-                  '/media/olivier/olivier_ext/gedata_current/jde_coffee/data/SP/areas/SP_area_cor.shp',
-                  '/media/olivier/olivier_ext/gedata_current/jde_coffee/data/ZM/areas/ZM_area_cor.shp']
+    avgWeights = [origin+'/CER/areas/CER_area_cor.shp',
+                  origin+'/CHA/areas/CHA_area_cor.shp',
+                  origin+'/CO/areas/CO_area_cor.shp',
+                  origin+'/ES/areas/ES_area_cor.shp',
+                  origin+'/MO/areas/MO_area_cor.shp',
+                  origin+'/SDM/areas/SDM_area_cor.shp',
+                  origin+'/SP/areas/SP_area_cor.shp',
+                  origin+'/ZM/areas/ZM_area_cor.shp']
     #Name of the variable with the coffee weights if using a shapefile
     #    Put None if using a raster for an area
     weightField = ['arabica_co','arabica_co','arabica_co','robusta_co','arabica_co','arabica_co','arabica_co','arabica_co']
     '''
     #RASTER OPTION
-    avgWeights = [['/media/olivier/olivier_ext/gedata_current/jde_coffee/MODIS/collection6/CER/masks/CER_densities_arabica_from_classifications_250m.tif'],
-                  ['/media/olivier/olivier_ext/gedata_current/jde_coffee/MODIS/collection6/CO/masks/CO_densities_arabica_from_classifications_250m.tif'],
-                  ['/media/olivier/olivier_ext/gedata_current/jde_coffee/MODIS/collection6/ES/masks/ES_densities_arabica_from_classifications_250m.tif',
-                   '/media/olivier/olivier_ext/gedata_current/jde_coffee/MODIS/collection6/ES/masks/ES_densities_robusta_from_classifications_250m.tif'],
-                  ['/media/olivier/olivier_ext/gedata_current/jde_coffee/MODIS/collection6/MO/masks/MO_densities_arabica_from_classifications_250m.tif'],
-                  ['/media/olivier/olivier_ext/gedata_current/jde_coffee/MODIS/collection6/SDM/masks/SDM_densities_arabica_from_classifications_250m.tif'],
-                  ['/media/olivier/olivier_ext/gedata_current/jde_coffee/MODIS/collection6/SP/masks/SP_densities_arabica_from_classifications_250m.tif'],
-                  ['/media/olivier/olivier_ext/gedata_current/jde_coffee/MODIS/collection6/ZM/masks/ZM_densities_arabica_from_classifications_250m.tif',
-                   '/media/olivier/olivier_ext/gedata_current/jde_coffee/MODIS/collection6/ZM/masks/ZM_densities_robusta_from_classifications_250m.tif']]
+    avgWeights = [[dst+'/CER/masks/CER_densities_arabica_from_classifications_250m.tif'],
+                  [dst+'/CO/masks/CO_densities_arabica_from_classifications_250m.tif'],
+                  [dst+'/ES/masks/ES_densities_arabica_from_classifications_250m.tif',
+                   dst+'/ES/masks/ES_densities_robusta_from_classifications_250m.tif'],
+                  [dst+'/MO/masks/MO_densities_arabica_from_classifications_250m.tif'],
+                  [dst+'/SDM/masks/SDM_densities_arabica_from_classifications_250m.tif'],
+                  [dst+'/SP/masks/SP_densities_arabica_from_classifications_250m.tif'],
+                  [dst+'/ZM/masks/ZM_densities_arabica_from_classifications_250m.tif',
+                   dst+'/ZM/masks/ZM_densities_robusta_from_classifications_250m.tif']]
     weightField = None
     
     #####################################################################################################################
