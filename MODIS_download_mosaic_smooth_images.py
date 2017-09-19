@@ -41,7 +41,7 @@ def run_script(iface):
     ##REGIONS parameters
     #Regions to process inputs    !!!!SHOULD BE IN EPSG 4326 PROJECTION
     #Names of the regions (also folders names) 
-    states = ['SP','ZM'] #["CER","CO","ES","MO","SDM","SP","ZM"]
+    states = ["CER","CO","ES","MO","SDM","SP","ZM"]
     #Varieties in each case
     varieties = [['arabica'],['arabica'],['arabica','robusta'],['arabica'],['arabica'],['arabica'],['arabica','robusta']]
     #Addresses of the shapefiles with the boundaries for each of the regions
@@ -56,7 +56,7 @@ def run_script(iface):
     
         
     ##DOWNLOAD parameters
-    dload = False
+    dload = True
     #Product to download
     product = 'MOD13Q1.006'
     #Username for the earthdata website
@@ -75,7 +75,7 @@ def run_script(iface):
     
     ##MOSAIC parameters
     #Should the downloaded files be mosaiced for each of the regions?
-    mosaic = False
+    mosaic = True
     #Starting date for the files to mosaic
     #    If None, will default to the files that have been just downloaded if any.
     startMosaic = None
@@ -92,14 +92,14 @@ def run_script(iface):
     avgWindow = 3
     #Starting date for the files to include as input in the smoothing process
     #    If None, defaults to 1 year before today
-    startSmooth = '2005-01-01'
+    startSmooth = '2016-10-01'
     #startSmooth = '2016-12-01'
     #Ending date for the files to include as input in the smoothing process
     #    If None, defaults to today
-    endSmooth = '2016-09-29'
+    endSmooth = '2017-08-13'
     #Start and end dates for the files to save to the disk after smoothing
     #    If None, defaults to 6 months before end smoothing date
-    startSaveS = '2005-01-01'
+    startSaveS = None
     #startSaveS = '2017-03-01'
     endSaveS = None #None to save them up to the end smoothing date
     
@@ -129,12 +129,12 @@ def run_script(iface):
     
     
     ##Ranking individual dates modis images in terms of deciles using the baselines
-    ranking = False
+    ranking = True
     #Starting and ending dates for the images to consider. Included
     #   If None, will default to 30 days
-    startRank = '2017-01-15'
+    startRank = '2017-07-27'
     #   If None, will default to today
-    endRank = '2017-01-18'
+    endRank = '2017-08-13'
     #File to use for masking the output
     maskRank = [['masks/CER_densities_arabica_from_classifications_1km.tif'],
                 ['masks/CO_densities_arabica_from_classifications_1km.tif'],
@@ -148,12 +148,12 @@ def run_script(iface):
     
     
     ##Estimate average ndvi value for each region
-    avgValue = False
+    avgValue = True
     #Starting and ending dates for the images to consider. Included
     #    If None, defaults to 1 year before today
-    startAvg = '2005-01-01'
+    startAvg = '2015-01-01'
     #    If None, will default to today
-    endAvg = '2016-10-15'
+    endAvg = '2017-08-13'
     #Grid/Raster to use for the averaging --> FULL PATH!!!!!!!
     '''
     #GRID OPTION
