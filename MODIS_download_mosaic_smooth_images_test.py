@@ -36,17 +36,16 @@ def run_script(iface):
     tempDir = 'Temp'
     #Destination folder for the download
     rawdataDir = 'raw_data'
-    
 
     ##REGIONS parameters
     #Regions to process inputs    !!!!SHOULD BE IN EPSG 4326 PROJECTION
     #Names of the regions (also folders names) 
-    states = ["CER","CHA","CO","ES","MO","SDM","SP","ZM"]
+    states = ["ES"] #["CER","CO","ES","MO","SDM","SP","ZM"]
     #Varieties in each case
-    varieties = [['arabica'],['arabica'],['arabica'],['arabica','robusta'],['arabica'],['arabica'],['arabica'],['arabica','robusta']]
+    varieties = [['robusta']] #[['arabica'],['arabica'],['arabica','robusta'],['arabica'],['arabica'],['arabica'],['arabica','robusta']]
     #Addresses of the shapefiles with the boundaries for each of the regions
     #Address of the boundary files !!!!SHOULD BE IN EPSG 4326 PROJECTION
-    statesBoundFiles = [origin+'/'+s+'/aoi/AOI_'+s+'.shp' for s in states] 
+    statesBoundFiles = [origin+s+'/aoi/AOI_'+s+'.shp' for s in states] 
     #Name of subfolder where to save the raw mosaic data (should be in the folders of the regions)
     statesRawFolder = 'raw_data'
     #Name of subfolder where to save the smoothed mosaic data (should be in the folders of the regions)
@@ -56,7 +55,7 @@ def run_script(iface):
     
         
     ##DOWNLOAD parameters
-    dload = True
+    dload = False
     #Product to download
     product = 'MOD13Q1.006'
     #Username for the earthdata website
@@ -75,7 +74,7 @@ def run_script(iface):
     
     ##MOSAIC parameters
     #Should the downloaded files be mosaiced for each of the regions?
-    mosaic = True
+    mosaic = False
     #Starting date for the files to mosaic
     #    If None, will default to the files that have been just downloaded if any.
     startMosaic = None
@@ -87,19 +86,23 @@ def run_script(iface):
     
     
     ##SMOOTHING parameters
-    smooth = False
+    smooth = True
     regWindow = 7
     avgWindow = 3
     #Starting date for the files to include as input in the smoothing process
-    #    If None, defaults to 1 year before the end smoothing date
-    startSmooth = '2015-04-01'
+    #    If None, defaults to 1 year before today
+    #startSmooth = '2005-06-01'
+    s1 = ['2015-09-29','2015-10-15','2015-10-31','2015-11-16','2015-12-02','2015-12-18','2016-01-01','2016-01-17','2016-02-02','2016-02-18',
+                 '2016-03-06','2016-03-22','2016-04-07','2016-04-23','2016-05-09','2016-05-25','2016-06-10','2016-06-26','2016-07-12','2016-07-28','2016-08-13']
     #startSmooth = '2016-12-01'
     #Ending date for the files to include as input in the smoothing process
     #    If None, defaults to today
-    endSmooth = None
+    #endSmooth = None
+    s2 = ['2016-09-29','2016-10-15','2016-10-31','2016-11-16','2016-12-02','2016-12-18','2017-01-01','2017-01-17','2017-02-02','2017-02-18',
+                 '2017-03-06','2017-03-22','2017-04-07','2017-04-23','2017-05-09','2017-05-25','2017-06-10','2017-06-26','2017-07-12','2017-07-28','2017-08-13']
     #Start and end dates for the files to save to the disk after smoothing
     #    If None, defaults to 6 months before end smoothing date
-    startSaveS = '2015-09-01'
+    startSaveS = None
     #startSaveS = '2017-03-01'
     endSaveS = None #None to save them up to the end smoothing date
     
@@ -113,7 +116,6 @@ def run_script(iface):
     #The mask should overlap perfectly with the modis images
     #The output model can have a different resolution, in which case the baseline will be produced with that resolution
     maskBaseline = [['masks/CER_densities_arabica_from_classifications_250m.tif'],
-                    ['masks/CHA_densities_arabica_from_classifications_250m.tif'],
                     ['masks/CO_densities_arabica_from_classifications_250m.tif'],
                     ['masks/ES_densities_arabica_from_classifications_250m.tif','masks/ES_densities_robusta_from_classifications_250m.tif'],
                     ['masks/MO_densities_arabica_from_classifications_250m.tif'],
@@ -121,7 +123,6 @@ def run_script(iface):
                     ['masks/SP_densities_arabica_from_classifications_250m.tif'],
                     ['masks/ZM_densities_arabica_from_classifications_250m.tif','masks/ZM_densities_robusta_from_classifications_250m.tif']]
     outModelRaster = [['masks/CER_densities_arabica_from_classifications_1km.tif'],
-                      ['masks/CHA_densities_arabica_from_classifications_1km.tif'],
                       ['masks/CO_densities_arabica_from_classifications_1km.tif'],
                       ['masks/ES_densities_arabica_from_classifications_1km.tif','masks/ES_densities_robusta_from_classifications_1km.tif'],
                       ['masks/MO_densities_arabica_from_classifications_1km.tif'],
@@ -133,13 +134,12 @@ def run_script(iface):
     ##Ranking individual dates modis images in terms of deciles using the baselines
     ranking = False
     #Starting and ending dates for the images to consider. Included
-    #   If None, will default to 60 days before the endRank date
-    startRank = None
+    #   If None, will default to 30 days
+    startRank = None #'2017-07-27'
     #   If None, will default to today
-    endRank = None
+    endRank = None #'2017-08-13'
     #File to use for masking the output
     maskRank = [['masks/CER_densities_arabica_from_classifications_1km.tif'],
-                ['masks/CHA_densities_arabica_from_classifications_1km.tif'],
                 ['masks/CO_densities_arabica_from_classifications_1km.tif'],
                 ['masks/ES_densities_arabica_from_classifications_1km.tif','masks/ES_densities_robusta_from_classifications_1km.tif'],
                 ['masks/MO_densities_arabica_from_classifications_1km.tif'],
@@ -151,12 +151,16 @@ def run_script(iface):
     
     
     ##Estimate average ndvi value for each region
-    avgValue = False
+    avgValue = True
     #Starting and ending dates for the images to consider. Included
     #    If None, defaults to 1 year before today
-    startAvg = '2006-01-01'
+    #startAvg = None
+    a1 = ['2016-09-01','2016-09-01','2016-09-01','2016-09-01','2016-09-01','2016-09-01','2016-09-01','2016-09-01','2016-09-01','2016-09-01',
+                '2016-09-01','2016-09-01','2016-09-01','2016-09-01','2016-09-01','2016-09-01','2016-09-01','2016-09-01','2016-09-01','2016-09-01','2016-09-01']
     #    If None, will default to today
-    endAvg = None
+    #endAvg = None
+    a2 = ['2016-09-29','2016-10-15','2016-10-31','2016-11-16','2016-12-02','2016-12-18','2017-01-01','2017-01-17','2017-02-02','2017-02-18',
+                 '2017-03-06','2017-03-22','2017-04-07','2017-04-23','2017-05-09','2017-05-25','2017-06-10','2017-06-26','2017-07-12','2017-07-28','2017-08-13']
     #Grid/Raster to use for the averaging --> FULL PATH!!!!!!!
     '''
     #GRID OPTION
@@ -173,10 +177,9 @@ def run_script(iface):
     weightField = ['arabica_co','arabica_co','arabica_co','robusta_co','arabica_co','arabica_co','arabica_co','arabica_co']
     '''
     #RASTER OPTION
-    #avgWeights = [[dst+'/ES/masks/ES_densities_robusta_from_classifications_250m.tif']]
-    
+    avgWeights = [[dst+'/ES/masks/ES_densities_robusta_from_classifications_250m.tif']]
+    '''
     avgWeights = [[dst+'/CER/masks/CER_densities_arabica_from_classifications_250m.tif'],
-                  [dst+'/CHA/masks/CHA_densities_arabica_from_classifications_250m.tif'],
                   [dst+'/CO/masks/CO_densities_arabica_from_classifications_250m.tif'],
                   [dst+'/ES/masks/ES_densities_arabica_from_classifications_250m.tif',
                    dst+'/ES/masks/ES_densities_robusta_from_classifications_250m.tif'],
@@ -185,7 +188,7 @@ def run_script(iface):
                   [dst+'/SP/masks/SP_densities_arabica_from_classifications_250m.tif'],
                   [dst+'/ZM/masks/ZM_densities_arabica_from_classifications_250m.tif',
                    dst+'/ZM/masks/ZM_densities_robusta_from_classifications_250m.tif']]
-    
+    '''
     weightField = None
     
     #####################################################################################################################
@@ -230,28 +233,44 @@ def run_script(iface):
             mosaicMODIS(root=dst, srcFolder=rawdataDir, tmpFolder=tempDir, 
                         regions=states, regionsOut=statesRawFolder, regionsBoundaries=statesBoundFiles, tiles=tiles,
                         startMosaic=startMosaic, endMosaic=endMosaic)
+    i = 0
+    for startSmooth, endSmooth, startAvg, endAvg in zip(s1, s2, a1, a2):
+        i += 1
+        if i < 9:
+            continue
         
-    if smooth:
-        print('Starting the smoothing process')
-        smoothMODIS(root=dst, regions=states, regionsIn=statesRawFolder, regionsOut=statesSmoothFolder, 
-                    startSmooth=startSmooth, endSmooth=endSmooth, regWindow=regWindow, avgWindow=avgWindow, 
-                    startSaveSmooth=startSaveS, endSaveSmooth=endSaveS)
+        print(endSmooth)
+        
+        if smooth:
+            print('Starting the smoothing process')
+            smoothMODIS(root=dst, regions=states, regionsIn=statesRawFolder, regionsOut=statesSmoothFolder, 
+                        startSmooth=startSmooth, endSmooth=endSmooth, regWindow=regWindow, avgWindow=avgWindow, 
+                        startSaveSmooth=startSaveS, endSaveSmooth=endSaveS)
+            
+            startS = datetime.strptime(endSmooth, '%Y-%m-%d').date()
+            startS = startS - timedelta(days=3)
+            startS = startS.strftime('%Y-%m-%d')
+            
+            #The second smoothing is only for the last date, it will use the smoothed data for all over dates
+            smoothMODIS2(root=dst, regions=states, regionsIn=statesRawFolder, regionsOut=statesSmoothFolder, 
+                        startSmooth=startSmooth, endSmooth=endSmooth, regWindow=regWindow, avgWindow=avgWindow, 
+                        startSaveSmooth=startS, endSaveSmooth=endSaveS)
+            
+        if createBaselines:
+            print('Starting creation of baselines')
+            createBaseline(root=dst, regions=states, varieties=varieties, regionsIn=statesSmoothFolder, regionsOut=statesRefFolder, 
+                           startRef=startRef, endRef=endRef, mask=maskBaseline, outModelRaster=outModelRaster)
+        
+        if ranking:
+            print('Starting analysis of individual dates compared to baseline')
+            rankDatesDeciles(root=dst, regions=states, varieties=varieties, regionsIn=statesSmoothFolder, refDecilesIn=statesRefFolder,
+                           startRank=startRank, endRank=endRank, mask=maskRank, minCoffee=minCoffee)
+        
     
-    if createBaselines:
-        print('Starting creation of baselines')
-        createBaseline(root=dst, regions=states, varieties=varieties, regionsIn=statesSmoothFolder, regionsOut=statesRefFolder, 
-                       startRef=startRef, endRef=endRef, mask=maskBaseline, outModelRaster=outModelRaster)
-    
-    if ranking:
-        print('Starting analysis of individual dates compared to baseline')
-        rankDatesDeciles(root=dst, regions=states, varieties=varieties, regionsIn=statesSmoothFolder, refDecilesIn=statesRefFolder,
-                       startRank=startRank, endRank=endRank, mask=maskRank, minCoffee=minCoffee)
-    
-
-    if avgValue:
-        print('Computing the average ndvi value for each zone')
-        computeAvgNdvi(root=dst, regions=states, varieties=varieties, regionsIn=statesSmoothFolder, avgWeights=avgWeights, 
-                       weightField=weightField, startAvg=startAvg, endAvg=endAvg)
+        if avgValue:
+            print('Computing the average ndvi value for each zone')
+            computeAvgNdvi(root=dst, regions=states, varieties=varieties, regionsIn=statesSmoothFolder, avgWeights=avgWeights, 
+                           weightField=weightField, startAvg=startAvg, endAvg=endAvg)
 
 
 
@@ -414,69 +433,8 @@ def mosaicMODIS(root, srcFolder, tmpFolder, regions, regionsOut, regionsBoundari
         cmd = 'gdalwarp -overwrite -t_srs EPSG:4326 -r near -of GTiff -co BIGTIFF=IF_NEEDED %s %s' % (inRaster, outRaster)
         os.system(cmd)
         
-        #read the image
-        imgMosaic = gdal.Open(outRaster)
-        #Get the geotransform and the projection
-        geoTrans = imgMosaic.GetGeoTransform()
-        projection = imgMosaic.GetProjection()
-        #Read band as array
-        band = imgMosaic.GetRasterBand(1)
-        
         #Loop through the regions to clip and mask the mosaic
         for s, shp in zip(regions, regionsBoundaries):
-            
-            #Input and output name
-            inRaster = root+'/'+tmpFolder+'/'+outName
-            outRaster = root+'/'+s+'/'+regionsOut+'/'+outName
-            
-            # Open the data source and read in the extent
-            driver = ogr.GetDriverByName('ESRI Shapefile')
-            mask_ds = driver.Open(shp, 0) # 0 means read-only. 1 means writeable.
-            mask_layer = mask_ds.GetLayer()
-            minX, maxX, minY, maxY = mask_layer.GetExtent()
-            
-            #Get the pixel position of the shapefile corners
-            ulX, ulY = world2Pixel(geoTrans, minX, maxY)
-            lrX, lrY = world2Pixel(geoTrans, maxX, minY)
-            
-            #clip the mosaic image to that extent
-            #Import as array xoffset, yoffset, xextent, yextent
-            clip = band.ReadAsArray(ulX, ulY, int(lrX - ulX), int(lrY - ulY)).astype(np.float)
-            
-            #Remove rasters to save if any
-            if os.path.isfile(outRaster):
-                os.remove(outRaster)
-            
-            #Create a new geoTransform for the output raster
-            geoRegion = list(geoTrans)
-            geoRegion[0] = minX
-            geoRegion[3] = maxY
-            
-            #Create an empty raster with the right size
-            rows, cols = clip.shape
-            driver = gdal.GetDriverByName("GTiff")
-            
-            new_raster = driver.Create(outRaster, cols, rows, 1, gdal.GDT_Float32, options=['COMPRESS=LZW', 'BIGTIFF=IF_NEEDED'])
-            new_raster.SetProjection(projection)
-            new_raster.SetGeoTransform(geoRegion)
-
-            new_raster.GetRasterBand(1).SetNoDataValue(-99)
-            new_raster.GetRasterBand(1).Fill(-99)
-            
-            #Rasterize the region into that raster
-            gdal.RasterizeLayer(new_raster, [1], mask_layer, burn_values=[1.], options=['ALL_TOUCHED=FALSE'])
-            
-            #Get the resulting raster band as an array
-            new = new_raster.GetRasterBand(1).ReadAsArray().astype(np.float)
-            new[new==1.] = clip[new==1.]
-            
-            #Export the values
-            new_raster.GetRasterBand(1).WriteArray(new, 0, 0)
-            
-            #Close the raster
-            new_raster.FlushCache()
-            new_raster = None
-            
             #Crop the mosaic and mask the raster
             inRaster = root+'/'+tmpFolder+'/'+outName
             outRaster = root+'/'+s+'/'+regionsOut+'/'+outName
@@ -484,12 +442,10 @@ def mosaicMODIS(root, srcFolder, tmpFolder, regions, regionsOut, regionsBoundari
             #cmd = 'gdalwarp -q -cutline %s -crop_to_cutline %s %s' % (shp, inRaster, outRaster)
             #os.system(cmd)
             #Call gdalwarp using the subprocess command
-            #out = subprocess.call(['/usr/bin/gdalwarp', '-q', '-overwrite', '-cutline', shp, '-crop_to_cutline', 
-            #                       '-of GTIFF', '-co BIGTIFF=IF_NEEDED', inRaster, outRaster])
-            #print(out)
+            out = subprocess.call(['/usr/bin/gdalwarp', '-q', '-overwrite', '-cutline', shp, '-crop_to_cutline', 
+                                   '-of GTIFF', '-co BIGTIFF=IF_NEEDED', inRaster, outRaster])
+            print(out)
             
-        imgMosaic = None
-        
         #Remove the .xml, .hdf and .vrt intermediary files
         xml = [f for f in os.listdir(os.path.join(root,tmpFolder)) if f.endswith('.xml') or 
                     f.endswith('.hdf') or f.endswith('.vrt') or f.endswith('.tif')]
@@ -518,15 +474,16 @@ def smoothMODIS(root, regions, regionsIn, regionsOut, startSmooth, endSmooth, re
     startSaveSmooth (str): Starting date for the files to save. If None, will save all the processed files
     endSaveSmooth (str): Ending date for the files to save. If None, will save all the processed files
     '''
+    if not startSmooth:
+        startSmooth = datetime.now() - timedelta(days=365)
+        startSmooth = startSmooth.date()
+    else:
+        startSmooth = datetime.strptime(startSmooth, '%Y-%m-%d').date()
     if not endSmooth:
         endSmooth = datetime.now()
         endSmooth = endSmooth.date()
     else:
         endSmooth = datetime.strptime(endSmooth, '%Y-%m-%d').date()
-    if not startSmooth:
-        startSmooth = endSmooth - timedelta(days=365)
-    else:
-        startSmooth = datetime.strptime(startSmooth, '%Y-%m-%d').date()
     
     #Transform into date format
     if not startSaveSmooth:
@@ -623,6 +580,122 @@ def smoothMODIS(root, regions, regionsIn, regionsOut, startSmooth, endSmooth, re
             p=None
 
 
+def smoothMODIS2(root, regions, regionsIn, regionsOut, startSmooth, endSmooth, regWindow, avgWindow, startSaveSmooth=None, endSaveSmooth=None):
+    '''
+    Function to do a temporal smoothing of a time series of identical images. Does not return anything, saves smoothed images on disk.
+    The input files should contain the date in their name in the format '_([0-9]{4}-[0-9]{2}-[0-9]{2})'
+    The processed files will have the same name plus a 'smooth_' prefix
+    
+    root (str): Address of root folder where  srcFolder, tmpFolder, regions folders and regionsOut are located
+    regions (list of str): Names of the regions to process. It should also correspond to the name of the folders
+            in root where the regionsOut folders are.
+    regionsIn (str): Name of the folder from regions where to find the input files to be smoothed 
+            It should be the same for all the regions 
+    regionsOut (str): Name of the folder from regions where to save the smoothed images 
+            It should be the same for all the regions
+    startSmooth (str): Starting date for the files to mosaic. If None, will process all the files found on the disk.
+    endSmooth (str): Ending date for the files to mosaic. If None, defaults to today
+    regWindow (int): size of the regression window (see Swets et al. for details)
+    avgWindow (int): sie of the averaging window (see Swets et al. for details)
+    startSaveSmooth (str): Starting date for the files to save. If None, will save all the processed files
+    endSaveSmooth (str): Ending date for the files to save. If None, will save all the processed files
+    '''
+    if not endSmooth:
+        endSmooth = datetime.now()
+        endSmooth = endSmooth.date()
+    else:
+        endSmooth = datetime.strptime(endSmooth, '%Y-%m-%d').date()
+    startSmooth = endSmooth - timedelta(days=180)
+    
+    #Transform into date format
+    startSaveSmooth = endSmooth
+    endSaveSmooth = endSmooth
+    
+    #Loop through the regions to do the smoothing for each
+    for r in regions:
+        print('Processing region '+str(r)+'...')
+        
+        #Import all the raw modis images on disk
+        onDisk = [f for f in os.listdir(os.path.join(root,r,regionsIn)) if f.endswith('.tif')]
+        
+        #Dates of these files
+        datesAll = [re.search('_([0-9]{4}-[0-9]{2}-[0-9]{2})', f).group(1) for f in onDisk]
+        #Transform into date format
+        datesAll = [datetime.strptime(d, '%Y-%m-%d').date() for d in datesAll]
+        
+        #Keep only the files and dates within the dates to process
+        onDisk = [f for f,d in zip(onDisk,datesAll) if d >= startSmooth and d <= endSmooth]
+        datesAll = [d for d in datesAll if d >= startSmooth and d <= endSmooth]
+        
+        #Sort the two list by date
+        datesAll, onDisk = (list(x) for x in zip(*sorted(zip(datesAll, onDisk))))
+        
+        #Create a mask to know which of the dates to save
+        toSave = [d >= startSaveSmooth and d <= endSaveSmooth for d in datesAll]
+        
+        #Import all the images to process in the right order
+        toProcess = [gdal.Open(os.path.join(root,r,regionsOut,'smooth_'+f)) for f in onDisk[:-1]]
+        toProcess.append(gdal.Open(os.path.join(root,r,regionsIn,onDisk[-1])))
+        
+        #Get the no data value if any
+        nodata = toProcess[1].GetRasterBand(1).GetNoDataValue()
+        
+        #Remove rasters to save if any
+        for s, f in zip(toSave, onDisk):
+            if s and os.path.isfile(root+'/'+r+'/'+regionsOut+'/smooth_'+f):
+                print(f)
+                os.remove(root+'/'+r+'/'+regionsOut+'/smooth_'+f)
+        
+        #Create empty copies of these files to use for the smoothed data only for the files to save
+        processed = [new_raster_from_base(p, root+'/'+r+'/'+regionsOut+'/smooth_'+f, 'GTiff', np.nan, gdal.GDT_Float32) 
+                        if s else False for s,p,f in zip(toSave, toProcess, onDisk)]
+        
+        #Get the size of the rasters to identify the limits of the blocks to loop through
+        band = toProcess[1].GetRasterBand(1)
+        #Get the size of the raster
+        xsize = band.XSize
+        ysize = band.YSize
+        #Set the block size
+        BlockXSize = 256
+        BlockYSize = 256
+        #Get the number of blocks in x and y directions
+        xBlocks = int(round(xsize/BlockXSize)) + 1
+        yBlocks = int(round(ysize/BlockYSize)) + 1
+        
+        totBlocks = xBlocks*yBlocks
+        progress = 1
+        
+        for xStep in range(xBlocks):
+            for yStep in range(yBlocks):
+                print('   '+str(r)+': Processing block '+str(progress)+' of '+str(totBlocks))
+                progress += 1
+                
+                blocks = [readRasterBlock(p, xStep*BlockXSize, yStep*BlockYSize, BlockXSize, BlockYSize) for p in toProcess]
+                
+                #Bring the blocks together into one single array
+                blocks = np.dstack(blocks)
+                #Recast the type
+                blocks = blocks.astype(np.float32)
+                
+                #Do the smoothing for each pixel
+                blocks = smoothingSwets(blocks, regWindow, avgWindow, nodata)
+                #blocks = smoothingSavitzky(blocks, nodata)
+                blocks = np.divide(blocks,10000.)
+                
+                #Change the values in the output raster
+                blocks = np.dsplit(blocks, len(toProcess))
+                for s, p, b in zip(toSave, processed, blocks):
+                    if s:
+                        p.GetRasterBand(1).WriteArray(b[:,:,0], xStep*BlockXSize, yStep*BlockYSize)
+        
+        #Close the rasters
+        for s, p in zip(toSave, processed):
+            if s:
+                p.FlushCache()
+                p = None
+        
+        for p in zip(toSave, toProcess):            
+            p=None
 
 def smoothingSwets(block, regWindow, avgWindow, nodata=None):
     '''
@@ -963,14 +1036,8 @@ def createBaseline(root, regions, varieties, regionsIn, regionsOut, startRef, en
                 #Get the no data value if any
                 nodata = toProcess[0].GetRasterBand(1).GetNoDataValue()
                 
-                #Name of the output baseline for that date
-                outname = 'ndvi_deciles_0to100pct_ref_period-'+str(startRef)+'-'+str(endRef)+'_day'+str(d)+'_date-'+dates[0].strftime('%b-%d')+'_'+varieties[r][v]+'.tif'
-                
-                #Remove existing raster if any
-                if os.path.isfile(root+'/'+regions[r]+'/'+regionsOut+'/'+outname):
-                    os.remove(root+'/'+regions[r]+'/'+regionsOut+'/'+outname)
-                
                 #Create an empty copy with 10 layers to use for storing the deciles
+                outname = 'ndvi_deciles_0to100pct_ref_period-'+str(startRef)+'-'+str(endRef)+'_day'+str(d)+'_date-'+dates[0].strftime('%b-%d')+'_'+varieties[r][v]+'.tif'
                 processed = new_raster_from_base(toProcess[0], root+'/'+regions[r]+'/'+regionsOut+'/'+outname, 'GTiff', np.nan, gdal.GDT_Float32, bands=10)
                 
                 #Get the size of the rasters to identify the limits of the blocks to loop through
@@ -1045,15 +1112,16 @@ def estimateDeciles(block, nodata):
 def rankDatesDeciles(root, regions, varieties, regionsIn, refDecilesIn, startRank, endRank, mask, minCoffee):
     
     #Transform into date format
+    if not startRank:
+        startRank = datetime.now() - timedelta(days=30)
+        startRank = startRank.date()
+    else:
+        startRank = datetime.strptime(startRank, '%Y-%m-%d').date()
     if not endRank:
         endRank = datetime.now()
         endRank = endRank.date()
     else:
         endRank = datetime.strptime(endRank, '%Y-%m-%d').date()
-    if not startRank:
-        startRank = endRank - timedelta(days=60)
-    else:
-        startRank = datetime.strptime(startRank, '%Y-%m-%d').date()
     
     #Loop through the regions to do the ranking for each
     for r in range(len(regions)):
@@ -1070,8 +1138,7 @@ def rankDatesDeciles(root, regions, varieties, regionsIn, refDecilesIn, startRan
         #Keep only the files and dates within the dates to process
         onDisk = [f for f,d in zip(onDisk,datesAll) if d >= startRank and d <= endRank]
         datesAll = [d for d in datesAll if d >= startRank and d <= endRank]
-        #Sort the two list by date
-        datesAll, onDisk = (list(x) for x in zip(*sorted(zip(datesAll, onDisk))))
+        onDisk.sort(key=dict(zip(onDisk, datesAll)).get) #Sort by date
         
         #Transform into days from start of the year and keep only the unique values
         days = [int(d.strftime('%j')) for d in datesAll]
@@ -1115,12 +1182,8 @@ def rankDatesDeciles(root, regions, varieties, regionsIn, refDecilesIn, startRan
                 band=None
                 
                 for m in minCoffee:
-                    #Create the output name
-                    outname = 'ndvi_'+date.strftime('%Y-%m-%d')+'_CompareToDecile_0BelowMin_110AboveMax_maskedbelow'+str(int(m*100))+'%'+varieties[r][v]+'.tif'
-                    #Remove existing raster if any
-                    if os.path.isfile(root+'/'+regions[r]+'/'+outname):
-                        os.remove(root+'/'+regions[r]+'/'+outname)
                     #Create an empty copy for storing the deciles comparisons
+                    outname = 'ndvi_'+date.strftime('%Y-%m-%d')+'_CompareToDecile_0BelowMin_110AboveMax_maskedbelow'+str(int(m*100))+'%'+varieties[r][v]+'.tif'
                     processed = new_raster_from_base(baseImg, root+'/'+regions[r]+'/'+outname, 'GTiff', -32768, gdal.GDT_Int16, bands=1)
                     
                     for xStep in range(xBlocks):
@@ -1506,18 +1569,3 @@ def new_raster_from_base(base, outputURI, formatR, nodata, datatype, bands=None)
         new_raster.GetRasterBand(i + 1).Fill(nodata)
 
     return new_raster            
-
-def world2Pixel(geoMatrix, x, y):
-    """
-    Uses a gdal geomatrix (gdal.GetGeoTransform()) to calculate
-    the pixel location of a geospatial coordinate
-    """
-    ulX = geoMatrix[0]
-    ulY = geoMatrix[3]
-    xDist = geoMatrix[1]
-    yDist = geoMatrix[5]
-    rtnX = geoMatrix[2]
-    rtnY = geoMatrix[4]
-    pixel = int((x - ulX) / xDist)
-    line = int((ulY - y) / xDist)
-    return (pixel, line)

@@ -22,7 +22,7 @@ def run_script(iface):
     ##PARAMETERS
     
     #MODIS date to map out
-    modisDate = '2017-07-28'
+    modisDate = '2016-07-27'
     
     #% of coffee masks to map out (the rasters for each should have been prepared in advance
     modisPct = ['5','15']
@@ -32,11 +32,12 @@ def run_script(iface):
     dataPrefix = '/media/olivier/olivier_ext/gedata_current/jde_coffee/data'
     
     #Names of the States/regions to map out. There should be one entry per coffee variety if the state contains more than one
-    states = ['CER','CO','ES','ES','MO','SDM','SP','ZM','ZM']
+    states = ['CER','CHA','CO','ES','ES','MO','SDM','SP','ZM','ZM']
     #Coffee varieties for each of the states
-    varieties = ['arabica','arabica','arabica','robusta','arabica','arabica','arabica','arabica','robusta'] #Coffee variety for each map
+    varieties = ['arabica','arabica','arabica','arabica','robusta','arabica','arabica','arabica','arabica','robusta'] #Coffee variety for each map
     #Titles for each of the modis maps, to which the modis date will be added at the end
     mapTitles = ['Centro Oeste Crop Health Index \nComparison to 10y History (2006-2016) \nArabica, ',
+                 'Chapada Crop Health Index \nComparison to 10y History (2006-2016) \nArabica, ',
                  'Cerrado Crop Health Index \nComparison to 10y History (2006-2016) \nArabica, ',
                  'Espirito Santo Crop Health Index \nComparison to 10y History (2006-2016) \nArabica, ',
                  'Espirito Santo Crop Health Index \nComparison to 10y History (2006-2016) \nRobusta, ',
@@ -46,33 +47,33 @@ def run_script(iface):
                  'Zona de Mata Crop Health Index \nComparison to 10y History (2006-2016) \nArabica, ',
                  'Zona de Mata Crop Health Index \nComparison to 10y History (2006-2016) \nRobusta, ']
     #Name of the boundary shapefile for each of the states
-    boundaries = ['CER.shp','CO.shp','Espirito_Santo_utm.shp','Espirito_Santo_utm.shp','MO.shp','Sul_de_Minas.shp','SP.shp','ZM.shp','ZM.shp']
+    boundaries = ['CER.shp','CHA.shp','CO.shp','Espirito_Santo_utm.shp','Espirito_Santo_utm.shp','MO.shp','Sul_de_Minas.shp','SP.shp','ZM.shp','ZM.shp']
     #Name of the shapefile with the cities for each of the states
-    cities = ['CER_cities.shp','CO_cities.shp','ES_cities.shp','ES_cities.shp','MO_cities.shp',
+    cities = ['CER_cities.shp','CHA_cities.shp','CO_cities.shp','ES_cities.shp','ES_cities.shp','MO_cities.shp',
               'SDM_cities.shp','SP_cities.shp','ZM_cities.shp','ZM_cities.shp']
     #Size of the maps for each of the states (options are 'PORTRAIT', 'LANDSCAPE' AND 'SQUARE')
-    mapSizes = ['LANDSCAPE','LANDSCAPE','PORTRAIT','PORTRAIT','PORTRAIT','LANDSCAPE','LANDSCAPE','PORTRAIT','PORTRAIT']
+    mapSizes = ['LANDSCAPE','PORTRAIT','LANDSCAPE','PORTRAIT','PORTRAIT','PORTRAIT','LANDSCAPE','LANDSCAPE','PORTRAIT','PORTRAIT']
     ###MAP BOXES Parameters
     #Parameters for the map boxes of each region
-    topX = [8,10,5,5,10,8,8,8,8] #x position (cm) of the top left corner of the map box
-    topY = [10,35,30,30,35,5,10,15,15] #y position (cm) of the top left corner of the map box
+    topX = [8,8,10,5,5,10,8,8,8,8] #x position (cm) of the top left corner of the map box
+    topY = [10,10,35,30,30,35,5,10,15,15] #y position (cm) of the top left corner of the map box
     #Size of the bottom margin below the map box. It will condition the size of the mapbox together with the top y position
-    marginBottom = [10,20,5,5,20,5,10,5,5]
+    marginBottom = [10,10,20,5,5,20,5,10,5,5]
     #Should the map box be framed?
     frameMapBox = False
     
     ###TITLE Parameters
-    titleX = [-80,10,0,0,0,30,50,0,0] #x position (cm) of the top left corner of the title box
-    titleY = [4,4,4,4,4,4,4,4,4] #y position (cm) of the top left corner of the title box
-    titleHeight = [25,25,25,25,25,25,25,25,25] #Height (cm) of the title box
+    titleX = [-80,0,10,0,0,0,30,50,0,0] #x position (cm) of the top left corner of the title box
+    titleY = [4,4,4,4,4,4,4,4,4,4] #y position (cm) of the top left corner of the title box
+    titleHeight = [25,25,25,25,25,25,25,25,25,25] #Height (cm) of the title box
     
     ###LEGEND Parameters
-    legendX = [6,6,6,6,6,6,6,6,6] #x position (cm) of the top left corner of the legend box
-    legendY = [80,80,55,55,140,80,80,45,45] #y position (cm) of the top left corner of the legend box
+    legendX = [6,6,6,6,6,6,6,6,6,6] #x position (cm) of the top left corner of the legend box
+    legendY = [80,45,80,55,55,140,80,80,45,45] #y position (cm) of the top left corner of the legend box
     
     ###COMMENT BOX Parameters 
     #The comment box is set to have the same width as the legend and to be set a little below the legend
-    commentGap = 3 #How much below the legend should the comment box start?
+    commentGap = [3,110,3,3,3,3,3,3,3,3] #How much below the legend should the comment box start?
     commentHeight = 40 #Height of the comment box
     #Comment to add to each of the maps 
     comment = 'Notes:'\
@@ -264,7 +265,7 @@ def run_script(iface):
             composerLabel.setFontColor(QColor(0,0,0))
             composerLabel.setHAlign(0x0001)     ## check Qt.AlignmentFlag in http://pyqt.sourceforge.net/Docs/PyQt4/qt.html#AlignmentFlag-enum
             #Size of comment frame and placement: (startX, startY [from top], width, height)
-            composerLabel.setSceneRect(QRectF(legendX[s], legendY[s] + legendSize.height() + commentGap, legendSize.width(), commentHeight))
+            composerLabel.setSceneRect(QRectF(legendX[s], legendY[s] + legendSize.height() + commentGap[s], legendSize.width(), commentHeight))
             composerLabel.setText(comment)
             
             composerLabel.setFrameEnabled(False)
