@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from osgeo import gdal, gdalconst, ogr
 import os, re, sys, osr
 import numpy as np
+from csv import DictWriter
 
 sys.path.append('/home/olivier/OlivierGithub/QGIS-scripts')
 import projection_function as proj
@@ -30,9 +31,9 @@ def run_script(iface):
     ##REGIONS parameters
     #Regions to process inputs    !!!!SHOULD BE IN EPSG 4326 PROJECTION
     #Names of the regions (also folders names) 
-    states = ['CER'] #["CER","CHA","CO","ES","MO","SDM","SP","ZM"]
+    states = ["CER","CHA","CO","ES","MO","SDM","SP","ZM"]
     #Varieties in each case
-    varieties = [['arabica']] #[['arabica'],['arabica'],['arabica'],['arabica','robusta'],['arabica'],['arabica'],['arabica'],['arabica','robusta']]
+    varieties = [['arabica'],['arabica'],['arabica'],['arabica','robusta'],['arabica'],['arabica'],['arabica'],['arabica','robusta']]
     #Name of subfolder where the smoothed images are located
     statesSmoothFolder = 'smooth_data'
     
@@ -42,13 +43,11 @@ def run_script(iface):
     idAttribute = 'CD_GEOCMU'
     
     #Start date for extraction
-    startd = '2017-01-01'
+    startd = '2006-01-01'
     #End date for extraction
-    endd = '2017-08-01'
+    endd = '2017-09-30'
     
-    masks = [['masks/CER_densities_arabica_from_classifications_250m.tif']]
-    '''
-    [['masks/CER_densities_arabica_from_classifications_250m.tif'],
+    masks = [['masks/CER_densities_arabica_from_classifications_250m.tif'],
                     ['masks/CHA_densities_arabica_from_classifications_250m.tif'],
                     ['masks/CO_densities_arabica_from_classifications_250m.tif'],
                     ['masks/ES_densities_arabica_from_classifications_250m.tif','masks/ES_densities_robusta_from_classifications_250m.tif'],
@@ -56,13 +55,15 @@ def run_script(iface):
                     ['masks/SDM_densities_arabica_from_classifications_250m.tif'],
                     ['masks/SP_densities_arabica_from_classifications_250m.tif'],
                     ['masks/ZM_densities_arabica_from_classifications_250m.tif','masks/ZM_densities_robusta_from_classifications_250m.tif']]
-    '''
+    
+    exportFormat = 'long'
+    
     extractModis(root=root, regions=states, varieties=varieties, regionsIn=statesSmoothFolder, outFolder=dst, masks=masks, 
-                 startExtract=startd, endExtract=endd, shpName=shp, attr=idAttribute, tempDir=tempDir, epsgShp=4674)
+                 startExtract=startd, endExtract=endd, shpName=shp, attr=idAttribute, tempDir=tempDir, exportFormat=exportFormat, epsgShp=4674)
 
 
 
-def extractModis(root, regions, varieties, regionsIn, outFolder, masks, startExtract, endExtract, shpName, attr, tempDir, epsgShp=None):
+def extractModis(root, regions, varieties, regionsIn, outFolder, masks, startExtract, endExtract, shpName, attr, tempDir, exportFormat, epsgShp=None):
     
     #Transform into date format
     if not endExtract:
@@ -95,6 +96,9 @@ def extractModis(root, regions, varieties, regionsIn, outFolder, masks, startExt
         return False
     elif not inEpsg:
         inEpsg = epsgShp
+    
+    if not isinstance(inEpsg,int):
+        inEpsg = int(inEpsg)
     
     if not inEpsg == 4326:
         
@@ -145,6 +149,18 @@ def extractModis(root, regions, varieties, regionsIn, outFolder, masks, startExt
         srcOut.Destroy()
         lyrOut = None
     
+    #Empty dictionary to hold the results.
+    #Every municipality covered by one of the regions will have a coffee weight
+    coffeeWeights = {'arabica':{}, 'robusta':{}}
+    #Every municipality will have a total number of modis pixels
+    totPixels = {}
+    #Every municipality covered by one of the regions will have a share of pixels with coffee in it
+    coffeeShare = {'arabica':{}, 'robusta':{}}
+    #Every municipality covered by one of the regions will have a coffee count
+    #Every date will have a dictionary containing the municipalities and values
+    imgStats = {'arabica':{}, 'robusta':{}}
+    
+    
     #Loop through the regions to extract the modis data for each
     for r in range(len(regions)):
         print('Extracting region '+str(regions[r])+'...')
@@ -167,28 +183,178 @@ def extractModis(root, regions, varieties, regionsIn, outFolder, masks, startExt
             print('no modis images to process in '+regions[r])
             continue
         
+        #Get a base image as a reference for format and extent
+        baseImg = gdal.Open(os.path.join(root,regions[r],regionsIn,onDisk[0]))
+        
+        #Get the corner latitude and longitude for the raster
+        width = baseImg.RasterXSize
+        height = baseImg.RasterYSize
+        gt = baseImg.GetGeoTransform()
+        minLonR = gt[0]
+        minLatR = gt[3] + width*gt[4] + height*gt[5] 
+        maxLonR = gt[0] + width*gt[1] + height*gt[2]
+        maxLatR = gt[3]
+        
+        #Close the raster
+        baseImg = None
+        
+        #Crop the shapefile by the extent of the raster
+        inShp = root+'/'+tempDir+'/temp.shp'
+        outShp = root+'/'+tempDir+'/temp_crop.shp'
+        #Call ogr2ogr using the os system command
+        cmd = 'ogr2ogr -f "ESRI Shapefile" %s %s -clipsrc %d %d %d %d' % (outShp, inShp, minLonR, minLatR, maxLonR, maxLatR)
+        os.system(cmd)
+        
+        
+        ###Extract the number of modis pixels per cropped municipalities
+        #Import the mask
+        weightsRaster = gdal.Open(root+'/'+regions[r]+'/'+masks[r][0])
+        #Create an empty copy for storing the temporary weighted image
+        weighted = new_raster_from_base(weightsRaster, root+'/'+tempDir+'/temp.tif', 'GTiff', 0., gdal.GDT_Float32, bands=1)
+        #Import coffee weights band as array
+        weightsBand = weightsRaster.GetRasterBand(1)
+        weightsArray = weightsBand.ReadAsArray()
+        #Recast the type to be sure
+        weightsArray = weightsArray.astype(np.float32)
+        #Replace all data by 1
+        weightsArray[:] = 1.
+        #Export to temporary raster
+        weighted.GetRasterBand(1).WriteArray(weightsArray)
+        #Close the temporary raster
+        weighted.FlushCache()
+        weighted = None
+        #Compute the count of pixels for each polygon of the cropped municipalities
+        stat = img.raster_stats(regionsFileName=os.path.join(root,tempDir,'temp_crop.shp'), rasterFileName=root+'/'+tempDir+'/temp.tif',  
+                                         polIdFieldName=attr, statistics=['sum'], outTxt=None, addShp=False, addSuffix='', 
+                                         numOutDecs=2, alltouch=True)
+        if not stat:
+            print('error extracting coffee sums per polygon')
+            continue
+        stat = stat[0]
+        #Add the counts to the total pixel counts
+        for polyid in stat.keys():
+            if not str(polyid) in totPixels:
+                totPixels[str(polyid)] = stat[polyid]['sum']
+            else:
+                totPixels[str(polyid)] = totPixels[str(polyid)] + stat[polyid]['sum']
+        #Remove existing temporary raster if any
+        try:
+            os.remove(os.path.join(root,tempDir,'temp.tif'))
+        except OSError:
+            pass
+        
+        
+        
         for v in range(len(varieties[r])):
-            #Get a base image as a reference for format
-            baseImg = gdal.Open(os.path.join(root,regions[r],regionsIn,onDisk[0]))
             
-            #Compute the sum for each polygon of the coffee
-            coffeeWeights = img.raster_stats(regionsFileName=os.path.join(root,tempDir,'temp.shp'), rasterFileName=root+'/'+regions[r]+'/'+masks[r][v],  
-                                             polIdFieldName=attr, statistics=['sum'], outTxt=None, addShp=False, addSuffix='', 
-                                             numOutDecs=2, alltouch=True)
+            for date in datesAll:
+                if not date.strftime('%Y-%m-%d') in imgStats[varieties[r][v]]:
+                    imgStats[varieties[r][v]][date.strftime('%Y-%m-%d')] = {}
+                    imgStats[varieties[r][v]][date.strftime('%Y-%m-%d')]['date'] = date.strftime('%Y-%m-%d')
             
-            if not coffeeWeights:
-                print('error extracting coffee sums per polygon')
-                continue
-            
-            coffeeWeights = coffeeWeights[0]
-            
+            ###Extract the number of pixels with some coffee per cropped municipalities
             #Import the mask
             weightsRaster = gdal.Open(root+'/'+regions[r]+'/'+masks[r][v])
+            #Create an empty copy for storing the temporary weighted image
+            weighted = new_raster_from_base(weightsRaster, root+'/'+tempDir+'/temp.tif', 'GTiff', 0., gdal.GDT_Float32, bands=1)
+            #Import coffee weights band as array
+            weightsBand = weightsRaster.GetRasterBand(1)
+            weightsArray = weightsBand.ReadAsArray()
+            #Recast the type to be sure
+            weightsArray = weightsArray.astype(np.float32)
+            #Replace the no data value by 0 and all non zero by 1
+            nodataW = weightsBand.GetNoDataValue()
+            if not nodataW:
+                weightsArray[np.logical_or(np.isnan(weightsArray),np.logical_or(weightsArray>1.,weightsArray<0.))] = 0
+            else:
+                weightsArray[np.logical_or(np.logical_or(np.isnan(weightsArray),weightsArray==nodataW),np.logical_or(weightsArray>1.,weightsArray<0.))] = 0
+            nodataW = None
+            #Replace all positive coffee values by 1
+            weightsArray[weightsArray > 0.] = 1
+            #Export to temporary raster
+            weighted.GetRasterBand(1).WriteArray(weightsArray)
+            #Close the temporary raster
+            weighted.FlushCache()
+            weighted = None
             
-            #nodataWeights = weightsRaster.GetRasterBand(1).GetNoDataValue()
+            '''
+            if regions[r] == 'ES' and varieties[r][v] == 'robusta':
+                try:
+                    os.remove(os.path.join(root,tempDir,'tempES.tif'))
+                except OSError:
+                    pass
+                weighted = new_raster_from_base(weightsRaster, root+'/'+tempDir+'/tempES.tif', 'GTiff', 0., gdal.GDT_Float32, bands=1)
+                #Export to temporary raster
+                weighted.GetRasterBand(1).WriteArray(weightsArray)
+                #Close the temporary raster
+                weighted.FlushCache()
+                weighted = None
+            ''' 
             
-            #Create an empty list to hold the averages by polygon for each date
-            imgStat = []
+            #Compute the count of pixels for each polygon of the cropped municipalities
+            stat = img.raster_stats(regionsFileName=os.path.join(root,tempDir,'temp_crop.shp'), rasterFileName=root+'/'+tempDir+'/temp.tif',  
+                                             polIdFieldName=attr, statistics=['sum'], outTxt=None, addShp=False, addSuffix='', 
+                                             numOutDecs=2, alltouch=True)
+            if not stat:
+                print('error extracting coffee sums per polygon')
+                continue
+            stat = stat[0]
+            #Add the sums to the share of coffee
+            for polyid in stat.keys():
+                #Do not consider the polygon if all values are missing or 0
+                if np.isnan(stat[polyid]['sum']) or stat[polyid]['sum'] == 0:
+                    continue
+                if not str(polyid) in coffeeWeights[varieties[r][v]]:
+                    coffeeShare[varieties[r][v]][str(polyid)] = stat[polyid]['sum']
+                else:
+                    coffeeShare[varieties[r][v]][str(polyid)] = coffeeShare[varieties[r][v]][str(polyid)] + stat[polyid]['sum']
+            #Remove existing temporary raster if any
+            try:
+                os.remove(os.path.join(root,tempDir,'temp.tif'))
+            except OSError:
+                pass
+            weightsRaster = None
+            
+            
+            ###Extract the sum of coffee weights per cropped municipality
+            #Import the mask
+            weightsRaster = gdal.Open(root+'/'+regions[r]+'/'+masks[r][v])
+            #Create an empty copy for storing the temporary weighted image
+            weighted = new_raster_from_base(weightsRaster, root+'/'+tempDir+'/temp.tif', 'GTiff', 0, gdal.GDT_Float32, bands=1)
+            #Import coffee weights band as array
+            weightsBand = weightsRaster.GetRasterBand(1)
+            weightsArray = weightsBand.ReadAsArray()
+            #Recast the type to be sure
+            weightsArray = weightsArray.astype(np.float32)
+            #Replace the no data values by 0
+            nodataW = weightsBand.GetNoDataValue()
+            if not nodataW:
+                weightsArray[np.logical_or(np.isnan(weightsArray),np.logical_or(weightsArray>1.,weightsArray<0.))] = 0.
+            else:
+                weightsArray[np.logical_or(np.logical_or(np.isnan(weightsArray),weightsArray==nodataW),np.logical_or(weightsArray>1.,weightsArray<0.))] = 0.
+            nodataW = None
+            #Export to temporary raster
+            weighted.GetRasterBand(1).WriteArray(weightsArray)
+            #Close the temporary raster
+            weighted.FlushCache()
+            weighted = None
+            #Compute the sum for each polygon of the coffee
+            stat = img.raster_stats(regionsFileName=os.path.join(root,tempDir,'temp_crop.shp'), rasterFileName=root+'/'+tempDir+'/temp.tif',  
+                                             polIdFieldName=attr, statistics=['sum'], outTxt=None, addShp=False, addSuffix='', 
+                                             numOutDecs=2, alltouch=True)
+            if not stat:
+                print('error extracting coffee sums per polygon')
+                continue
+            stat = stat[0]
+            #Add the weights to the coffee weights dictionary
+            for polyid in stat.keys():
+                #Do not consider the polygon if all values are missing or 0
+                if np.isnan(stat[polyid]['sum']) or stat[polyid]['sum'] == 0:
+                    continue
+                if not str(polyid) in coffeeWeights[varieties[r][v]]:
+                    coffeeWeights[varieties[r][v]][str(polyid)] = stat[polyid]['sum']
+                else:
+                    coffeeWeights[varieties[r][v]][str(polyid)] = coffeeWeights[varieties[r][v]][str(polyid)] + stat[polyid]['sum']
             
             #Loop through the images
             for i, date in zip(onDisk,datesAll):
@@ -212,8 +378,13 @@ def extractModis(root, regions, varieties, regionsIn, outFolder, masks, startExt
                 
                 #Recast the type to be sure
                 imgArray = imgArray.astype(np.float32)
+                
                 #Replace the no data values by 0
-                imgArray[np.logical_or(np.isnan(imgArray),np.logical_or(imgArray>1,imgArray<-1))] = 0.
+                nodataI = imgBand.GetNoDataValue()
+                if not nodataI:
+                    imgArray[np.logical_or(np.isnan(imgArray),np.logical_or(imgArray>1.,imgArray<-1.))] = 0.
+                else:
+                    imgArray[np.logical_or(np.logical_or(np.isnan(imgArray),imgArray==nodataI),np.logical_or(imgArray>1.,imgArray<-1.))] = 0.
                 
                 #Change the resolution of the raster to match the images if needed
                 geoSmooth = weightsRaster.GetGeoTransform()
@@ -228,12 +399,16 @@ def extractModis(root, regions, varieties, regionsIn, outFolder, masks, startExt
                 #Import coffee weights band as array
                 weightsBand = weightsReproj.GetRasterBand(1)
                 weightsArray = weightsBand.ReadAsArray()
-                weightsArray[weightsArray>1] = np.nan
                 
                 #Recast the type to be sure
                 weightsArray = weightsArray.astype(np.float32)
+                
                 #Replace the no data values by 0
-                weightsArray[np.logical_or(np.isnan(weightsArray),np.logical_or(weightsArray>1,weightsArray<-1))] = 0.
+                nodataW = weightsBand.GetNoDataValue()
+                if not nodataW:
+                    weightsArray[np.logical_or(np.isnan(weightsArray),np.logical_or(weightsArray>1.,weightsArray<0.))] = 0.
+                else:
+                    weightsArray[np.logical_or(np.logical_or(np.isnan(weightsArray),weightsArray==nodataW),np.logical_or(weightsArray>1.,weightsArray<0.))] = 0.
                 
                 #Estimate the weighted sum for each pixel
                 weightedArray = np.multiply(weightsArray, imgArray)
@@ -244,11 +419,31 @@ def extractModis(root, regions, varieties, regionsIn, outFolder, masks, startExt
                 #Close the temporary raster
                 weighted.FlushCache()
                 weighted = None
+                weightsReproj = None
                 
-                stat = img.raster_stats(regionsFileName=os.path.join(root,tempDir,'temp.shp'), rasterFileName=root+'/'+tempDir+'/temp.tif',  
+                stat = img.raster_stats(regionsFileName=os.path.join(root,tempDir,'temp_crop.shp'), rasterFileName=root+'/'+tempDir+'/temp.tif',  
                                         polIdFieldName=attr, statistics=['sum'], outTxt=None, addShp=False, addSuffix='', 
                                         numOutDecs=2, alltouch=True)
-                imgStat.append(stat[0])
+                
+                if not stat:
+                    print('error extracting ndvi sums per polygon for date '+date.strftime('%Y-%m-%d'))
+                    continue
+                
+                stat = stat[0]
+                #Output is a list (here one element) where each element is a dictionary. Keys are the shp ids. Each then is 
+                #also a dictionary, with each key being a summary statistics
+                
+                for polyid in stat.keys():
+                    #Do not consider the polygon if not contained in the raster bounding box or if there is no coffee
+                    #if not polyid in insideFeat or np.isnan(stat[polyid]['sum']) or not str(polyid) in coffeeWeights[varieties[r][v]].keys():
+                    if np.isnan(stat[polyid]['sum']) or not str(polyid) in coffeeWeights[varieties[r][v]].keys():
+                        continue
+                    
+                    if not str(polyid) in imgStats[varieties[r][v]][date.strftime('%Y-%m-%d')]:
+                        imgStats[varieties[r][v]][date.strftime('%Y-%m-%d')][str(polyid)] = stat[polyid]['sum']
+                    else:
+                        imgStats[varieties[r][v]][date.strftime('%Y-%m-%d')][str(polyid)] = (imgStats[varieties[r][v]][date.strftime('%Y-%m-%d')][str(polyid)] + 
+                                                                                             stat[polyid]['sum'])
                 
             #Remove the temporary file
             try:
@@ -256,25 +451,87 @@ def extractModis(root, regions, varieties, regionsIn, outFolder, masks, startExt
             except OSError:
                 pass
             
-            #Get the IDs that have some weighted ndvi value
-            keys = set()
-            for m in imgStat:
-                keys.update(m.keys())
+            #Close the mask 
+            weightsRaster = None
             
-            #Combine the data from the coffee weights and the sum of the ndvi
-            zz = 0
-            for m in range(len(imgStat)):
-                for k in imgStat[m].keys():
-                    imgStat[m][k] = imgStat[m][k]['sum']/coffeeWeights[k]['sum']
-                    if zz<3:
-                        print(coffeeWeights[k]['sum'])
-                        print(imgStat[m][k])
-                        print(' ')
-                        zz +=1
+        #Remove the temporary shapefile
+        try:
+            driver.DeleteDataSource(os.path.join(root,tempDir,'temp_crop.shp'))
+        except OSError:
+            pass
+        
+    #Combine the data from the coffee weights and the sum of the ndvi
+    for v in ['arabica','robusta']:
+        if imgStats[v]:
+            for date in imgStats[v].keys():
+                for polyid in imgStats[v][date].keys():
+                    
+                    if not polyid == 'date':
+                        if not polyid in coffeeShare[v].keys() or coffeeShare[v][polyid]/totPixels[polyid] < 0.1:
+                            del imgStats[v][date][polyid]
+                            continue
+                        
+                        imgStats[v][date][polyid] = imgStats[v][date][polyid]/coffeeWeights[v][polyid]
+        
+            #Export all the dates and polygon ids to a text file
+            outNm = 'Weighted_avgndvi_permunicipality_'+v+'_'+startExtract.strftime('%Y-%m-%d')+'_'+endExtract.strftime('%Y-%m-%d')+'.txt'
             
-            #Extract the data for all the dates
+            if exportFormat == 'wide':
+                #order the output by polygon id in a list
+                #Each element is a dictionary with the fields to be exported (polygon id, date and value)
+                transposed = {}
+                polyids = set()
+                for date in imgStats[v].keys():
+                    polyids.update(imgStats[v][date].keys())
+                polyids.remove('date')
+                for polyid in polyids:
+                    transposed[polyid] = {}
+                    transposed[polyid]['id'] = polyid
+                for date in imgStats[v].keys():
+                    keys = imgStats[v][date].keys()
+                    keys.remove('date')
+                    for polyid in keys:
+                        transposed[polyid][date] = imgStats[v][date][polyid]
+                imgStats[v] = transposed
+                
+                #order the output by date in a list. Each element is an element of the original dictionary and will be exported
+                out = []
+                colnames = set()
+                
+                for k in imgStats[v].keys():
+                    out.append(imgStats[v][k])
+                    colnames.update(imgStats[v][k].keys())
+                colnames = list(colnames)
+                if 'date' in colnames:
+                    colnames.remove('date')
+                    colnames.sort(key=float)
+                    colnames.insert(0, 'date')
+                else:
+                    colnames.remove('id')
+                    colnames.sort(key=lambda d: datetime.strptime(d, '%Y-%m-%d'))
+                    colnames.insert(0, 'id')
+            
+            elif exportFormat == 'long':
+                out = []
+                for date in imgStats[v].keys():
+                    polyids = imgStats[v][date].keys()
+                    polyids.remove('date')
+                    for polyid in polyids:
+                        out.append({'id':polyid, 'date':date, 'value':imgStats[v][date][polyid]})
+                
+                colnames = ['id','date','value']
+            
+            with open(os.path.join(outFolder,outNm), "w") as f:
+                dict_writer = DictWriter(f, colnames, extrasaction='ignore', delimiter="\t", restval="0")
+                dict_writer.writeheader()
+                for p in out:
+                    dict_writer.writerow(p)
         
-        
+    #Remove the temporary shapefile
+    try:
+        driver.DeleteDataSource(os.path.join(root,tempDir,'temp.shp'))
+    except OSError:
+        pass    
         
                 
 def warp_raster(src, dst, resampleOption='nearest', outputURI=None, outFormat='MEM'):

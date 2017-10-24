@@ -87,7 +87,7 @@ def run_script(iface):
     
     
     ##SMOOTHING parameters
-    smooth = False
+    smooth = True
     regWindow = 7
     avgWindow = 3
     #Starting date for the files to include as input in the smoothing process
@@ -131,10 +131,10 @@ def run_script(iface):
     
     
     ##Ranking individual dates modis images in terms of deciles using the baselines
-    ranking = False
+    ranking = True
     #Starting and ending dates for the images to consider. Included
     #   If None, will default to 60 days before the endRank date
-    startRank = None
+    startRank = '2017-06-15'
     #   If None, will default to today
     endRank = None
     #File to use for masking the output
@@ -151,7 +151,7 @@ def run_script(iface):
     
     
     ##Estimate average ndvi value for each region
-    avgValue = False
+    avgValue = True
     #Starting and ending dates for the images to consider. Included
     #    If None, defaults to 1 year before today
     startAvg = '2006-01-01'

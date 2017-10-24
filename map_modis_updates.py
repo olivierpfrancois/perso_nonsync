@@ -5,7 +5,7 @@
 
 """ Your Description of the script goes here """
 
-# Some commonly used imports
+# Imports
 
 from PyQt4.QtCore import *
 from PyQt4.QtGui import *
@@ -22,14 +22,17 @@ def run_script(iface):
     ##PARAMETERS
     
     #MODIS date to map out
-    modisDate = '2016-07-27'
+    modisDate = '2017-09-30'
     
     #% of coffee masks to map out (the rasters for each should have been prepared in advance
     modisPct = ['5','15']
     
     #Address for the working directory for MODIS and for the data (boundaries, cities)
-    modisPrefix = '/media/olivier/olivier_ext/gedata_current/jde_coffee/MODIS/collection6'
-    dataPrefix = '/media/olivier/olivier_ext/gedata_current/jde_coffee/data'
+    modisPrefix = '/media/olivier/olivier_ext1/gedata_current/jde_coffee/MODIS/collection6'
+    dataPrefix = '/media/olivier/olivier_ext1/gedata_current/jde_coffee/data'
+    
+    #Destination folder for the maps from the modisPrefix
+    destFolder = 'maps'
     
     #Names of the States/regions to map out. There should be one entry per coffee variety if the state contains more than one
     states = ['CER','CHA','CO','ES','ES','MO','SDM','SP','ZM','ZM']
@@ -145,14 +148,14 @@ def run_script(iface):
             #Import the shapefile with the cities
             city = QgsVectorLayer(dataPrefix+'/'+states[s]+'/places/'+cities[s], 'Cities', 'ogr')
             #Load style for the cities
-            city.loadNamedStyle('/media/olivier/olivier_ext/gedata_current/jde_coffee/MODIS/decile_comparison_style_cities.qml')
+            city.loadNamedStyle('/media/olivier/olivier_ext1/gedata_current/jde_coffee/MODIS/decile_comparison_style_cities.qml')
             
             
             #Import the modis raster layer
             modis = QgsRasterLayer(modisPrefix+'/'+states[s]+'/ndvi_'+modisDate+
                                    '_CompareToDecile_0BelowMin_110AboveMax_maskedbelow'+p+'%'+varieties[s]+'.tif')
             #Load style for modis
-            modis.loadNamedStyle('/media/olivier/olivier_ext/gedata_current/jde_coffee/MODIS/decile_comparison_style_purplebluescale.qml')
+            modis.loadNamedStyle('/media/olivier/olivier_ext1/gedata_current/jde_coffee/MODIS/decile_comparison_style_purplebluescale.qml')
             
             
             #Add the layers to the registry
@@ -314,7 +317,7 @@ def run_script(iface):
             #EXPORT THE MAP
             
             #Create name
-            outNm = modisPrefix+'/'+states[s]+'/'+states[s]+'_decile_comparison_'+varieties[s]+'_'+modisDate+'_'+p+'pct.'+exportFormat.lower() 
+            outNm = modisPrefix+'/'+destFolder+'/'+states[s]+'/decile_comparison_'+modisDate+'_'+states[s]+'_'+varieties[s]+'_'+p+'pct.'+exportFormat.lower() 
             exportMap(c, exportFormat, outNm)
         
         #Remove raster layer (modis)
