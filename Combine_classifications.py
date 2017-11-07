@@ -5,10 +5,10 @@ import subprocess
 
 def run_script(iface):
     #Address of the folder with the classifications
-    classifFolder = '/media/olivier/olivier_ext/gedata_current/jde_coffee/data/SP/classifs'
+    classifFolder = '/media/olivier/olivier_ext/gedata_current/jde_coffee/data/Vietnam/LD/classifs'
     
     #Address of the folder with the legends
-    legendFolder = '/media/olivier/olivier_ext/gedata_current/jde_coffee/data/SP/classifs/Legend'
+    legendFolder = '/media/olivier/olivier_ext/gedata_current/jde_coffee/data/Vietnam/LD/classifs/Legend'
     
     #Address of the folder for the temporary files
     tempFolder = '/media/olivier/olivier_ext/gedata_current/temp'
@@ -28,11 +28,11 @@ def run_script(iface):
     
     #TAB delimited file with the priority order in which to combine the classifications
     #The file should have two columns, the first is a priority number, the second the file name of the classification
-    orderClassif = '/media/olivier/olivier_ext/gedata_current/jde_coffee/data/SP/classifs/classif_priorities_SP.txt'
+    orderClassif = '/media/olivier/olivier_ext/gedata_current/jde_coffee/data/Vietnam/LD/classifs/classif_priorities_LD.txt'
     
     #Ouput name and address for the combined files and legend
-    exportClassifName = '/media/olivier/olivier_ext/gedata_current/jde_coffee/data/SP/classifs/combined_classif_SP.tif'
-    exportLegendName = '/media/olivier/olivier_ext/gedata_current/jde_coffee/data/SP/classifs/legend_combined_classif_SP.txt'
+    exportClassifName = '/media/olivier/olivier_ext/gedata_current/jde_coffee/data/Vietnam/LD/classifs/combined_classif_LD.tif'
+    exportLegendName = '/media/olivier/olivier_ext/gedata_current/jde_coffee/data/Vietnam/LD/classifs/legend_combined_classif_LD.txt'
     
     
     
