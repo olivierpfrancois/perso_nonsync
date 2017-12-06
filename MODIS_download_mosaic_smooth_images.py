@@ -78,7 +78,7 @@ def run_script(iface):
     
     # #MOSAIC parameters
     # Should the downloaded files be mosaiced for each of the regions?
-    mosaic = False
+    mosaic = True
     # Starting date for the files to mosaic
     #    If None, will default to the files that have been just downloaded if any.
     startMosaic = '2017-07-01'
@@ -96,13 +96,13 @@ def run_script(iface):
     # Starting date for the files to include as input in the smoothing process
     #    If None, defaults to 1 year before the end smoothing date
     startSmooth = None
-    # startSmooth = '2016-12-01'
+    # startSmooth = '2012-03-01'
     # Ending date for the files to include as input in the smoothing process
     #    If None, defaults to today
     endSmooth = None
     # Start and end dates for the files to save to the disk after smoothing
     #    If None, defaults to 6 months before end smoothing date
-    startSaveS = None
+    startSaveS = '2017-06-10'
     # startSaveS = '2017-03-01'
     endSaveS = None  # None to save them up to the end smoothing date
     

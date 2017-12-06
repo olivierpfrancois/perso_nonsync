@@ -22,7 +22,7 @@ def run_script(iface):
     # #PARAMETERS
     
     # MODIS date to map out
-    modisDate = '2017-09-30'
+    modisDate = '2017-08-29'
     
     # % of coffee masks to map out (the rasters for each should have been prepared in advance
     modisPct = ['5', '15']
@@ -93,7 +93,7 @@ def run_script(iface):
     # Format for export
     exportFormat = 'PNG'  # 'PDF'
     # Resolution for export
-    exportResolution = 350
+    exportResolution = 300
     
     # Parameters transparency for the title and legend frames. Currently not used as frames are set with no background
     itemsTransparency1 = 190
@@ -148,14 +148,14 @@ def run_script(iface):
             # Import the shapefile with the cities
             city = QgsVectorLayer(dataPrefix + '/' + states[s] + '/places/' + cities[s], 'Cities', 'ogr')
             # Load style for the cities
-            city.loadNamedStyle('/media/olivier/olivier_ext1/gedata_current/jde_coffee/MODIS/decile_comparison_style_cities.qml')
+            city.loadNamedStyle('/home/olivierp/jde_coffee/MODIS/decile_comparison_style_cities.qml')
             
             
             # Import the modis raster layer
             modis = QgsRasterLayer(modisPrefix + '/' + states[s] + '/ndvi_' + modisDate + 
                                    '_CompareToDecile_0BelowMin_110AboveMax_maskedbelow' + p + '%' + varieties[s] + '.tif')
             # Load style for modis
-            modis.loadNamedStyle('/media/olivier/olivier_ext1/gedata_current/jde_coffee/MODIS/decile_comparison_style_purplebluescale.qml')
+            modis.loadNamedStyle('/home/olivierp/jde_coffee/MODIS/decile_comparison_style_purplebluescale.qml')
             
             
             # Add the layers to the registry
@@ -317,7 +317,7 @@ def run_script(iface):
             # EXPORT THE MAP
             
             # Create name
-            outNm = modisPrefix + '/' + destFolder + '/decile_comparison_' + modisDate + '_' + states[s] + '_' + varieties[s] + '_' + p + 'pct.' + exportFormat.lower() 
+            outNm = modisPrefix + '/' + destFolder + '/decile_comparison_' + states[s] + '_' + varieties[s] + '_' + p + 'pct_' + modisDate + '.' + exportFormat.lower() 
             exportMap(c, exportFormat, outNm)
         
         # Remove raster layer (modis)
