@@ -15,6 +15,7 @@ import qgis.utils as qu
 from datetime import datetime
 import os
 
+
 def run_script(iface):    
         
     #########################################################################################################################
@@ -99,8 +100,6 @@ def run_script(iface):
     itemsTransparency1 = 190
     itemsTransparency2 = 100
     
-    
-    
     #########################################################################################################################
     #########################################################################################################################
     # #ACTIVE CODE
@@ -127,7 +126,6 @@ def run_script(iface):
                 if layer.name() in ['Cities', ''] or 'Less than ' in layer.name():
                     registry.removeMapLayers([layer.id()])
             
-            
             # Import the shapefile with the state boundaries
             bound = QgsVectorLayer(dataPrefix + '/' + states[s] + '/boundaries/' + boundaries[s], boundNm, 'ogr')
             # Change the style for the boundary layer
@@ -144,27 +142,22 @@ def run_script(iface):
             # Repaint the layer to force an update
             # bound.triggerRepaint()
             
-            
             # Import the shapefile with the cities
             city = QgsVectorLayer(dataPrefix + '/' + states[s] + '/places/' + cities[s], 'Cities', 'ogr')
             # Load style for the cities
             city.loadNamedStyle('/home/olivierp/jde_coffee/MODIS/decile_comparison_style_cities.qml')
             
-            
             # Import the modis raster layer
             modis = QgsRasterLayer(modisPrefix + '/' + states[s] + '/ndvi_' + modisDate + 
-                                   '_CompareToDecile_0BelowMin_110AboveMax_maskedbelow' + p + '%' + varieties[s] + '.tif')
+                                   '_CompareToDecile_0BelowMin_110AboveMax_maskedbelow' + p + '%_' + varieties[s] + '.tif')
             # Load style for modis
             modis.loadNamedStyle('/home/olivierp/jde_coffee/MODIS/decile_comparison_style_purplebluescale.qml')
-            
             
             # Add the layers to the registry
             registry.addMapLayers([bound, city, modis])
             
             # Zoom to extent of boundary layer
             canvas.setExtent(bound.extent())
-            
-            
             
             #####################################################
             # CREATE THE MAP
@@ -210,8 +203,6 @@ def run_script(iface):
             composerMap.setFrameOutlineWidth(0.5)  # Used only if a frame is enabled for the map box
             c.addItem(composerMap)
             
-            
-            
             #####################################################
             # ADD THE TITLE
             
@@ -228,8 +219,6 @@ def run_script(iface):
             composerLabel.setBackgroundEnabled(False)  # Should the title box have a background?
             composerLabel.setBackgroundColor(QColor(255, 255, 255, itemsTransparency1))  # Background color, used only if background is enabled
             c.addItem(composerLabel)
-            
-            
             
             #####################################################
             # ADD THE LEGEND
@@ -258,8 +247,6 @@ def run_script(iface):
             legend.setItemPosition(legendX[s], legendY[s], legendSize.width(), legendSize.height(), QgsComposerItem.UpperLeft, False, -1)
             c.addItem(legend)
             
-            
-            
             #####################################################
             # ADD THE COMMENT
             
@@ -275,8 +262,6 @@ def run_script(iface):
             composerLabel.setBackgroundEnabled(False)
             composerLabel.setBackgroundColor(QColor(255, 255, 255, itemsTransparency1))
             c.addItem(composerLabel)
-            
-            
             
             #####################################################
             # ADD THE SCALE BAR
@@ -310,8 +295,6 @@ def run_script(iface):
             frameRect.setShapeType(1)
             c.addItem(frameRect)
             '''
-            
-            
             
             #####################################################
             # EXPORT THE MAP

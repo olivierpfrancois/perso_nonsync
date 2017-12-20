@@ -220,7 +220,7 @@ def run_script(iface):
             print('Starting the mosaic process')
             mosaicMODIS(root=dst, srcFolder=rawdataDir, tmpFolder=tempDir,
                         regions=states, regionsOut=statesRawFolder, regionsBoundaries=statesBoundFiles, tiles=tiles,
-                        startMosaic=startMosaic, endMosaic=endMosaic)
+                        subset='1 0 0 0 0 0 0 0 0 0 0 0', startMosaic=startMosaic, endMosaic=endMosaic)
         
     if smooth:
         print('Starting the smoothing process')
@@ -319,7 +319,7 @@ def downloadMODIS(dstFolder, pwd, user, tiles, product, startDownload=None, endD
 
 
    
-def mosaicMODIS(root, srcFolder, tmpFolder, regions, regionsOut, regionsBoundaries, tiles, startMosaic=None, endMosaic=None):
+def mosaicMODIS(root, srcFolder, tmpFolder, regions, regionsOut, regionsBoundaries, tiles, subset, startMosaic=None, endMosaic=None):
     '''
     Function to mosaic the tiles of modis images and clip them to a series of regions.
     Does not return anything.
@@ -334,6 +334,7 @@ def mosaicMODIS(root, srcFolder, tmpFolder, regions, regionsOut, regionsBoundari
             It should be the same for all the regions
     regionsBoundaries (list of str): List the full address of the shapefiles with the regions boundaries
     tiles (list of str): List of  tiles to mosaic (e.g. 'h13v10')
+    subset (str): string with the layers to extract from the hdf images (e.g. '1 0 0 0 0 0 0 0 0 0 0 0')
     startMosaic (str): Starting date for the files to mosaic. If None, will process all the files found on the disk.
     endMosaic (str): Ending date for the files to mosaic. If None, defaults to today
     '''
