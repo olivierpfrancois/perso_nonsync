@@ -16,14 +16,14 @@ from datetime import datetime
 import os
 
 
-def run_script(iface):    
-        
+def run_script(iface):
+    
     #########################################################################################################################
     #########################################################################################################################
     # #PARAMETERS
     
     # MODIS date to map out
-    modisDate = '2017-08-29'
+    modisDate = '2017-11-17'
     
     # % of coffee masks to map out (the rasters for each should have been prepared in advance
     modisPct = ['5', '15']
@@ -51,12 +51,24 @@ def run_script(iface):
                  'Zona de Mata Crop Health Index \nComparison to 10y History (2006-2016) \nArabica, ',
                  'Zona de Mata Crop Health Index \nComparison to 10y History (2006-2016) \nRobusta, ']
     # Name of the boundary shapefile for each of the states
-    boundaries = ['CER.shp', 'CHA.shp', 'CO.shp', 'Espirito_Santo_utm.shp', 'Espirito_Santo_utm.shp', 'MO.shp', 'Sul_de_Minas.shp', 'SP.shp', 'ZM.shp', 'ZM.shp']
+    boundaries = ['aoi/AOI_CER_microregions_utm.shp',
+                  'aoi/AOI_CHA_microregions_utm.shp',
+                  'aoi/AOI_CO_microregions_utm.shp',
+                  'aoi/AOI_ES_microregions_utm.shp',
+                  'aoi/AOI_ES_microregions_utm.shp',
+                  'aoi/AOI_MO_microregions_utm.shp',
+                  'aoi/AOI_SDM_microregions_utm.shp',
+                  'aoi/AOI_SP_microregions_utm.shp',
+                  'aoi/AOI_ZM_microregions_utm.shp',
+                  'aoi/AOI_ZM_microregions_utm.shp']
     # Name of the shapefile with the cities for each of the states
-    cities = ['CER_cities.shp', 'CHA_cities.shp', 'CO_cities.shp', 'ES_cities.shp', 'ES_cities.shp', 'MO_cities.shp',
-              'SDM_cities.shp', 'SP_cities.shp', 'ZM_cities.shp', 'ZM_cities.shp']
+    cities = ['CER_cities.shp', 'CHA_cities.shp', 'CO_cities.shp',
+              'ES_cities.shp', 'ES_cities.shp', 'MO_cities.shp',
+              'SDM_cities.shp', 'SP_cities.shp', 'ZM_cities.shp',
+              'ZM_cities.shp']
     # Size of the maps for each of the states (options are 'PORTRAIT', 'LANDSCAPE' AND 'SQUARE')
-    mapSizes = ['LANDSCAPE', 'PORTRAIT', 'LANDSCAPE', 'PORTRAIT', 'PORTRAIT', 'PORTRAIT', 'LANDSCAPE', 'LANDSCAPE', 'PORTRAIT', 'PORTRAIT']
+    mapSizes = ['LANDSCAPE', 'PORTRAIT', 'LANDSCAPE', 'PORTRAIT', 'PORTRAIT',
+                'PORTRAIT', 'LANDSCAPE', 'LANDSCAPE', 'PORTRAIT', 'PORTRAIT']
     # ##MAP BOXES Parameters
     # Parameters for the map boxes of each region
     topX = [8, 8, 10, 5, 5, 10, 8, 8, 8, 8]  # x position (cm) of the top left corner of the map box
@@ -126,8 +138,20 @@ def run_script(iface):
                 if layer.name() in ['Cities', ''] or 'Less than ' in layer.name():
                     registry.removeMapLayers([layer.id()])
             
+            # Import the shapefile with the cities
+            city = QgsVectorLayer(dataPrefix + '/' + states[s] + '/places/' + cities[s], 'Cities', 'ogr')
+            # Load style for the cities
+            city.loadNamedStyle('/home/olivierp/jde_coffee/MODIS/decile_comparison_style_cities.qml')
+            
+            # Import the modis raster layer
+            modis = QgsRasterLayer(modisPrefix + '/' + states[s] + '/ndvi_' + modisDate + 
+                                   '_CompareToDecile_0BelowMin_110AboveMax_' + varieties[s] + '_maskedbelow' + p + 'pct.tif')
+            
+            # Load style for modis
+            modis.loadNamedStyle('/home/olivierp/jde_coffee/MODIS/decile_comparison_style_purplebluescale.qml')
+            
             # Import the shapefile with the state boundaries
-            bound = QgsVectorLayer(dataPrefix + '/' + states[s] + '/boundaries/' + boundaries[s], boundNm, 'ogr')
+            bound = QgsVectorLayer(dataPrefix + '/' + states[s] + '/' + boundaries[s], boundNm, 'ogr')
             # Change the style for the boundary layer
             # Prepare symbol properties
             properties = {}
@@ -142,19 +166,8 @@ def run_script(iface):
             # Repaint the layer to force an update
             # bound.triggerRepaint()
             
-            # Import the shapefile with the cities
-            city = QgsVectorLayer(dataPrefix + '/' + states[s] + '/places/' + cities[s], 'Cities', 'ogr')
-            # Load style for the cities
-            city.loadNamedStyle('/home/olivierp/jde_coffee/MODIS/decile_comparison_style_cities.qml')
-            
-            # Import the modis raster layer
-            modis = QgsRasterLayer(modisPrefix + '/' + states[s] + '/ndvi_' + modisDate + 
-                                   '_CompareToDecile_0BelowMin_110AboveMax_maskedbelow' + p + '%_' + varieties[s] + '.tif')
-            # Load style for modis
-            modis.loadNamedStyle('/home/olivierp/jde_coffee/MODIS/decile_comparison_style_purplebluescale.qml')
-            
             # Add the layers to the registry
-            registry.addMapLayers([bound, city, modis])
+            registry.addMapLayers([city, modis, bound])
             
             # Zoom to extent of boundary layer
             canvas.setExtent(bound.extent())

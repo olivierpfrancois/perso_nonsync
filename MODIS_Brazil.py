@@ -9,18 +9,14 @@
     to process.
  """
 
-import os
+import os, re
 import MODIS_gedata_toolbox as md
 
 
-def run_script(iface):
-    
+def main():
     #####################################################################################################################
     #####################################################################################################################
     # #PARAMETERS
-    
-    # Path to MRT software
-    # mrtPath = '/home/olivier/MRT'
     
     # #DIRECTORIES parameters
     # Working directory
@@ -33,7 +29,7 @@ def run_script(iface):
     tempDir = '/home/olivierp/jde_coffee/Temp'
     # Destination folder for the download
     rawdataDir = 'raw_data'
-
+    
     # #REGIONS parameters
     # Regions to process inputs    !!!!SHOULD BE IN EPSG 4326 PROJECTION
     # Names of the regions (also folders names) 
@@ -50,9 +46,9 @@ def run_script(iface):
     statesSmoothFolder = 'smooth_data'
     # Name of subfolder where to save (if produced) and get the reference baseline for each date in the year (should be in the folders of the regions)
     statesRefFolder = 'baseline'
-        
+    
     # #DOWNLOAD parameters
-    dload = True
+    dload = False
     # Product to download
     product = 'MOD13Q1.006'
     # Username for the earthdata website
@@ -71,18 +67,23 @@ def run_script(iface):
     
     # #MOSAIC parameters
     # Should the downloaded files be mosaiced for each of the regions?
-    mosaic = True
+    mosaic = False
     # Starting date for the files to mosaic
     #    If None, will default to the files that have been just downloaded if any.
-    startMosaic = '2017-07-01'
+    startMosaic = '2005-01-01'
     # startMosaic = '2005-01-01'
     # Ending date for the files to mosaic
     #    If None, defaults to today
     endMosaic = None
     # endMosaic = '2005-02-01'
     
+    # masking missing values
+    checkQuality = True
+    inFolder = statesRawFolder
+    outFolder = 'masked_missing'
+    
     # #SMOOTHING parameters
-    smooth = True
+    smooth = False
     regWindow = 7
     avgWindow = 3
     # Starting date for the files to include as input in the smoothing process
@@ -131,7 +132,7 @@ def run_script(iface):
                             dst + '/ZM/' + 'masks/ZM_densities_robusta_from_classifications_1km.tif']]
     
     # #Ranking individual dates modis images in terms of deciles using the baselines
-    ranking = True
+    ranking = False
     # Starting and ending dates for the images to consider. Included
     #   If None, will default to 60 days before the endRank date
     startRank = '2017-06-15'
@@ -155,27 +156,13 @@ def run_script(iface):
     minCoffee = [0.05, 0.15]
     
     # #Estimate average ndvi value for each region
-    avgValue = True
+    avgValue = False
     # Starting and ending dates for the images to consider. Included
     #    If None, defaults to 1 year before today
     startAvg = '2006-01-01'
     #    If None, will default to today
     endAvg = None
     #Grid/Raster to use for the averaging --> FULL PATH!!!!!!!
-    '''
-    #GRID OPTION
-    avgWeights = [origin+'/CER/areas/CER_area_cor.shp',
-                  origin+'/CHA/areas/CHA_area_cor.shp',
-                  origin+'/CO/areas/CO_area_cor.shp',
-                  origin+'/ES/areas/ES_area_cor.shp',
-                  origin+'/MO/areas/MO_area_cor.shp',
-                  origin+'/SDM/areas/SDM_area_cor.shp',
-                  origin+'/SP/areas/SP_area_cor.shp',
-                  origin+'/ZM/areas/ZM_area_cor.shp']
-    #Name of the variable with the coffee weights if using a shapefile
-    #    Put None if using a raster for an area
-    weightField = ['arabica_co','arabica_co','arabica_co','robusta_co','arabica_co','arabica_co','arabica_co','arabica_co']
-    '''
     # RASTER OPTION
     # avgWeights = [[dst + '/LD/masks/LD_densities_coffee_from_classifications_250m.tif']]
     avgWeights = [[dst + '/CER/masks/CER_densities_arabica_from_classifications_250m.tif'],
@@ -213,15 +200,50 @@ def run_script(iface):
             if not startMosaic:
                 print('No start date provided for mosaic. Will mosaic all files on disk')
             print('Starting the mosaic process')
-            md.mosaicMODISWrapper(root=dst, srcFolder=os.path.join(dst, rawdataDir), tmpFolder=tempDir,
-                        regions=states, regionsOut=statesRawFolder, regionsBoundaries=statesBoundFiles, tiles=tiles,
-                        subset='1 0 0 0 0 0 0 0 0 0 0 0', startMosaic=startMosaic, endMosaic=endMosaic)
-        
+            md.mosaicMODISWrapper(root=dst,
+                                  srcFolder=os.path.join(dst, rawdataDir),
+                                  tmpFolder=tempDir,
+                                  regions=states,
+                                  regionsOut=statesRawFolder,
+                                  regionsBoundaries=statesBoundFiles,
+                                  tiles=tiles,
+                                  subset='1 0 1 0 0 0 0 0 0 0 0 0',
+                                  suffix=['NDVI', 'Quality'],
+                                  startMosaic=startMosaic,
+                                  endMosaic=endMosaic)
+    
+    if checkQuality:
+        for s in states:
+            # Get all the images on disk
+            allNDVI = [os.path.join(dst, s, inFolder, f) for 
+                       f in os.listdir(os.path.join(dst, s, inFolder)) 
+                       if f.endswith('NDVI.tif')]
+            allNDVI.sort()
+            allQuality = [os.path.join(dst, s, inFolder, f) for 
+                          f in os.listdir(os.path.join(dst, s, inFolder)) 
+                          if f.endswith('Quality.tif')]
+            allQuality.sort()
+            
+            allOut = [re.sub(inFolder, outFolder, f) for f in allNDVI]
+            
+            # Define the dataset
+            dataset = zip(allNDVI, allQuality, allOut)
+            
+            for d in dataset:
+                md.maskQualityVI(d[0], d[1], d[2])
+    
     if smooth:
         print('Starting the smoothing process')
-        md.smoothMODIS(root=dst, regions=states, regionsIn=statesRawFolder, regionsOut=statesSmoothFolder,
-                    startSmooth=startSmooth, endSmooth=endSmooth, regWindow=regWindow, avgWindow=avgWindow,
-                    startSaveSmooth=startSaveS, endSaveSmooth=endSaveS)
+        md.smoothMODIS(root=dst,
+                       regions=states,
+                       regionsIn=statesRawFolder,
+                       regionsOut=statesSmoothFolder,
+                       startSmooth=startSmooth,
+                       endSmooth=endSmooth,
+                       regWindow=regWindow,
+                       avgWindow=avgWindow,
+                       startSaveSmooth=startSaveS,
+                       endSaveSmooth=endSaveS)
     
     if createBaselines:
         print('Starting creation of baselines')
@@ -231,10 +253,13 @@ def run_script(iface):
     if ranking:
         print('Starting analysis of individual dates compared to baseline')
         md.rankDatesDeciles(root=dst, regions=states, varieties=varieties, regionsIn=statesSmoothFolder, refDecilesIn=statesRefFolder,
-                       startRank=startRank, endRank=endRank, mask=maskRank, minCoffee=minCoffee)
+                       startRank=startRank, endRank=endRank, mask=maskRank, minDensity=minCoffee)
 
     if avgValue:
         print('Computing the average ndvi value for each zone')
-        cmd.omputeAvgNdvi(root=dst, regions=states, varieties=varieties, regionsIn=statesSmoothFolder, avgWeights=avgWeights,
+        md.computeAvgNdvi(root=dst, regions=states, varieties=varieties, regionsIn=statesSmoothFolder, avgWeights=avgWeights,
                        weightField=weightField, startAvg=startAvg, endAvg=endAvg)
 
+
+if __name__ == '__main__':
+    main()

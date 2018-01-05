@@ -92,6 +92,7 @@ if mosaic:
                        tmpFolder=tempDir, regions=states, regionsOut=statesRawFolder,
                        regionsBoundaries=statesBoundFiles, tiles=tiles,
                        subset='1 0 1 0 0 0 0 0 0 0 0 0', suffix=['NDVI', 'Quality'],
+                       nodataOut=[32767, 65535],
                        startMosaic=startMosaic, endMosaic=endMosaic)
 
 if checkQuality:
@@ -113,7 +114,7 @@ if checkQuality:
     dataset = zip(allNDVI, allQuality, allOut)
     
     for d in dataset:
-        md.maskQualityVI(d[0], d[1], d[2])
+        md.maskQualityVI(ndviRaster=d[0], qualityRaster=d[1], outRaster=d[2], nodataOut=-3000)
     
     '''
     def functionUnpack(args):

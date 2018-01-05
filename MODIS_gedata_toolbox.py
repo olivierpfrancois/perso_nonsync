@@ -89,7 +89,9 @@ def downloadMODIS(dstFolder, pwd, user, tiles, product, startDownload=None, endD
     return newHdf
 
    
-def mosaicMODISWrapper(root, srcFolder, tmpFolder, regions, regionsOut, regionsBoundaries, tiles, subset, suffix, startMosaic=None, endMosaic=None):
+def mosaicMODISWrapper(root, srcFolder, tmpFolder, regions, regionsOut,
+                       regionsBoundaries, tiles, subset, suffix, nodataOut=None,
+                       startMosaic=None, endMosaic=None):
     '''
     Function to mosaic the tiles of modis images and clip them to a series of regions.
     Does not return anything.
@@ -105,6 +107,9 @@ def mosaicMODISWrapper(root, srcFolder, tmpFolder, regions, regionsOut, regionsB
     tiles (list of str): List of  tiles to mosaic (e.g. 'h13v10')
     subset (str): string with the layers to extract from the hdf images (e.g. '1 0 0 0 0 0 0 0 0 0 0 0')
     suffix (list): list of string, suffixes to assign for naming each of the subsets
+    nodataOut (list): None or list of the same length as suffix, with the no data value to use for each layer extracted 
+        when masking by the regions. Can leave one no data value as None to 
+        use the no data value of the raster
     startMosaic (str): Starting date for the files to mosaic. If None, will process all the files found on the disk.
     endMosaic (str): Ending date for the files to mosaic. If None, defaults to today
     '''
@@ -169,7 +174,8 @@ def mosaicMODISWrapper(root, srcFolder, tmpFolder, regions, regionsOut, regionsB
         
         # Create the output name for the mosaic file
         outName = re.sub('\..+', '', files[0])  # Get the product name
-        outName = outName + '_' + dlong.strftime('%Y-%m-%d') + '_h' + '-'.join(map(str, tilesH)) + 'v' + '-'.join(map(str, tilesV)) + '_250m_16_days'
+        outName = (outName + '_' + dlong.strftime('%Y-%m-%d') + '_h' + '-'.join(map(str, tilesH)) + 'v' + 
+                   '-'.join(map(str, tilesV)) + '_250m_16_days')
         
         mosaicMODIS(images=[os.path.join(srcFolder, f) for f in files],
                     subset=subset,
@@ -177,20 +183,23 @@ def mosaicMODISWrapper(root, srcFolder, tmpFolder, regions, regionsOut, regionsB
                     tempFolder=tmpFolder,
                     outFile='/'.join([tmpFolder, outName + '.tif']))
         
-        # Loop through the regions to clip and mask the mosaics
-        for s, shp in zip(regions, regionsBoundaries):
+        if not nodataOut:
+            nodataOut = [None for _ in suffix]
             
-            # Loop through the mosaics
-            for l in range(len(suffix)):
+        # Loop through the mosaics
+        for l in range(len(suffix)):
+            
+            # Loop through the regions to clip and mask the mosaics
+            for s, shp in zip(regions, regionsBoundaries):
                 
                 # Clip the mosaic by the extent of the the shapefile
                 clipMaskRasterByShp(shp=shp,
                                     raster='/'.join([tmpFolder, outName + '_' + suffix[l] + '.tif']),
                                     outRaster=root + '/' + s + '/' + regionsOut + '/' + outName + '_' + suffix[l] + '.tif',
-                                    nodata=-3000)
+                                    nodataOut=nodataOut[l])
                 
-                # Remove intermediary file
-                os.remove('/'.join([tmpFolder, outName + '_' + suffix[l] + '.tif']))
+            # Remove intermediary file
+            os.remove('/'.join([tmpFolder, outName + '_' + suffix[l] + '.tif']))
         
         # Remove the .xml, .hdf and .vrt intermediary files
         xml = [f for f in os.listdir(os.path.join(tmpFolder)) if f.endswith('.xml') or 
@@ -233,7 +242,7 @@ def mosaicMODIS(images, subset, suffixes, tempFolder, outFile):
         os.remove(inRaster)
 
 
-def clipMaskRasterByShp(shp, raster, outRaster, nodata=None):
+def clipMaskRasterByShp(shp, raster, outRaster, nodataOut=None):
     
     # Open the data source and read in the extent
     driver = ogr.GetDriverByName('ESRI Shapefile')
@@ -281,9 +290,9 @@ def clipMaskRasterByShp(shp, raster, outRaster, nodata=None):
     # Get the data type
     dType = band.DataType
     
-    nodataImg = band.GetNoDataValue()
+    nodataImg = nodataOut
     if not nodataImg:
-        nodataImg = nodata
+        nodataImg = band.GetNoDataValue()
     
     if not nodataImg:
         print('No NODATA information in raster and none provided')
@@ -382,7 +391,9 @@ def smoothMODIS(root, regions, regionsIn, regionsOut, startSmooth, endSmooth, re
         print('Processing region ' + str(r) + '...')
         
         # Import all the raw modis images on disk
-        onDisk = [f for f in os.listdir(os.path.join(root, r, regionsIn)) if f.endswith('.tif')]
+        onDisk = [os.path.join(root, r, regionsIn, f) 
+                  for f in os.listdir(os.path.join(root, r, regionsIn)) 
+                  if f.endswith('.tif')]
         
         # Dates of these files
         datesAll = [re.search('_([0-9]{4}-[0-9]{2}-[0-9]{2})', f).group(1) for f in onDisk]
@@ -402,10 +413,13 @@ def smoothMODIS(root, regions, regionsIn, regionsOut, startSmooth, endSmooth, re
         # Smooth the images
         smoothSeries(inRasters=onDisk, toSave=toSave,
                      outFolder=root + '/' + r + '/' + regionsOut,
+                     regWindow=regWindow,
+                     avgWindow=avgWindow,
                      algo='Swets', blockXSize=256, blockYSize=256)
 
 
-def smoothSeries(inRasters, toSave, outFolder, algo='Swets', blockXSize=256, blockYSize=256):
+def smoothSeries(inRasters, toSave, outFolder, regWindow, avgWindow,
+                 algo='Swets', blockXSize=256, blockYSize=256):
     if not len(inRasters) == len(toSave):
         print('toSave should be a list of bollean with the same length as the inputs')
         return False
@@ -415,16 +429,16 @@ def smoothSeries(inRasters, toSave, outFolder, algo='Swets', blockXSize=256, blo
     
     # Get the no data value if any
     nodata = toProcess[0].GetRasterBand(1).GetNoDataValue()
-    
+    print(inRasters[0])
     # Remove rasters to save if any
-    for s, f in zip(toSave, onDisk):
+    for s, f in zip(toSave, inRasters):
         if s and os.path.isfile(outFolder + '/smooth_' + os.path.basename(f)):
             os.remove(outFolder + '/smooth_' + os.path.basename(f))
     
     # Create empty copies of these files to use for the smoothed data only for the files to save
     processed = [new_raster_from_base(p, outFolder + '/smooth_' + os.path.basename(f),
                                       'GTiff', np.nan, gdal.GDT_Float32) 
-                    if s else False for s, p, f in zip(toSave, toProcess, onDisk)]
+                    if s else False for s, p, f in zip(toSave, toProcess, inRasters)]
     
     # Get the size of the rasters to identify the limits of the blocks to loop through
     band = toProcess[1].GetRasterBand(1)
@@ -432,18 +446,18 @@ def smoothSeries(inRasters, toSave, outFolder, algo='Swets', blockXSize=256, blo
     xsize = band.XSize
     ysize = band.YSize
     # Get the number of blocks in x and y directions based on block size
-    xBlocks = int(round(xsize / BlockXSize)) + 1
-    yBlocks = int(round(ysize / BlockYSize)) + 1
+    xBlocks = int(round(xsize / blockXSize)) + 1
+    yBlocks = int(round(ysize / blockYSize)) + 1
     
     totBlocks = xBlocks * yBlocks
     progress = 1
     
     for xStep in range(xBlocks):
         for yStep in range(yBlocks):
-            print('   ' + str(r) + ': Processing block ' + str(progress) + ' of ' + str(totBlocks))
+            print('     Processing block ' + str(progress) + ' of ' + str(totBlocks))
             progress += 1
             
-            blocks = [readRasterBlock(p, xStep * BlockXSize, yStep * BlockYSize, BlockXSize, BlockYSize) for p in toProcess]
+            blocks = [readRasterBlock(p, xStep * blockXSize, yStep * blockYSize, blockXSize, blockYSize) for p in toProcess]
             
             # Bring the blocks together into one single array
             blocks = np.dstack(blocks)
@@ -463,7 +477,7 @@ def smoothSeries(inRasters, toSave, outFolder, algo='Swets', blockXSize=256, blo
             blocks = np.dsplit(blocks, len(toProcess))
             for s, p, b in zip(toSave, processed, blocks):
                 if s:
-                    p.GetRasterBand(1).WriteArray(b[:, :, 0], xStep * BlockXSize, yStep * BlockYSize)
+                    p.GetRasterBand(1).WriteArray(b[:, :, 0], xStep * blockXSize, yStep * blockYSize)
     
     # Close the rasters
     for s, p in zip(toSave, processed):
@@ -883,13 +897,13 @@ def createDecileRaster(images, outFile, mask=None, outModelRaster=None, blockXSi
     xsize = band.XSize
     ysize = band.YSize
     # Get the number of blocks in x and y directions based on block size
-    xBlocks = int(round(xsize / BlockXSize)) + 1
-    yBlocks = int(round(ysize / BlockYSize)) + 1
+    xBlocks = int(round(xsize / blockXSize)) + 1
+    yBlocks = int(round(ysize / blockYSize)) + 1
     
     for xStep in range(xBlocks):
         for yStep in range(yBlocks):
         
-            block = [readRasterBlock(p, xStep * BlockXSize, yStep * BlockYSize, BlockXSize, BlockYSize) for p in toProcess]
+            block = [readRasterBlock(p, xStep * blockXSize, yStep * blockYSize, blockXSize, blockYSize) for p in toProcess]
             
             # Bring the blocks together into one single array
             block = np.dstack(block)
@@ -902,7 +916,7 @@ def createDecileRaster(images, outFile, mask=None, outModelRaster=None, blockXSi
             # Change the values in the output raster
             deciles = np.dsplit(deciles, 10)
             for i in range(10):
-                processed.GetRasterBand(i + 1).WriteArray(deciles[i][:, :, 0], xStep * BlockXSize, yStep * BlockYSize)
+                processed.GetRasterBand(i + 1).WriteArray(deciles[i][:, :, 0], xStep * blockXSize, yStep * blockYSize)
     
     # Close the rasters
     for p in toProcess:
@@ -1026,7 +1040,7 @@ def rankDatesDeciles(root, regions, varieties, regionsIn, refDecilesIn, startRan
                 baseFile = os.path.join(root, regions[r], refDecilesIn, baseFile[0])
                 
                 # Create the output name
-                outName = os.path.isfile(root + '/' + regions[r] + '/' + 
+                outName = os.path.join(root + '/' + regions[r] + '/' + 
                                          'ndvi_' + date.strftime('%Y-%m-%d') + 
                                          '_CompareToDecile_0BelowMin_110AboveMax_' + 
                                          varieties[r][v] + '.tif')
@@ -1037,11 +1051,11 @@ def rankDatesDeciles(root, regions, varieties, regionsIn, refDecilesIn, startRan
                                    densityMask=maskD,
                                    outFile=outName,
                                    minDensity=minDensity,
-                                   BlockXSize=256, BlockYSize=256)
+                                   blockXSize=256, blockYSize=256)
 
 
 def estimateRankRaster(image, deciles, densityMask, outFile,
-                       minDensity=None, BlockXSize=256, BlockYSize=256):
+                       minDensity=None, blockXSize=256, blockYSize=256):
     
     # Import the mask
     nanMask = gdal.Open(densityMask)
@@ -1068,8 +1082,8 @@ def estimateRankRaster(image, deciles, densityMask, outFile,
     xsize = band.XSize
     ysize = band.YSize
     # Get the number of blocks in x and y directions based on the block size
-    xBlocks = int(round(xsize / BlockXSize)) + 1
-    yBlocks = int(round(ysize / BlockYSize)) + 1
+    xBlocks = int(round(xsize / blockXSize)) + 1
+    yBlocks = int(round(ysize / blockYSize)) + 1
     band = None
     
     if not minDensity:
@@ -1080,32 +1094,32 @@ def estimateRankRaster(image, deciles, densityMask, outFile,
             continue
         
         # Prepare output name
-        outFile.replace('.tif', '_maskedbelow' + str(int(m * 100)) + '%.tif')
+        outRaster = re.sub('.tif', '_maskedbelow' + str(int(m * 100)) + 'pct.tif', outFile)
         
         # Remove existing raster if any
-        if os.path.isfile(outFile):
-            os.remove(outFile)
+        if os.path.isfile(outRaster):
+            os.remove(outRaster)
         # Create an empty copy for storing the deciles comparisons
-        processed = new_raster_from_base(baseImg, outFile, 'GTiff',
+        processed = new_raster_from_base(baseImg, outRaster, 'GTiff',
                                          - 32768, gdal.GDT_Int16, bands=1)
         
         for xStep in range(xBlocks):
             for yStep in range(yBlocks):
                 
                 # Read the block from the images
-                blockSmooth = readRasterBlock(smoothImg, xStep * BlockXSize,
-                                              yStep * BlockYSize,
-                                              BlockXSize, BlockYSize)
+                blockSmooth = readRasterBlock(smoothImg, xStep * blockXSize,
+                                              yStep * blockYSize,
+                                              blockXSize, blockYSize)
                 
-                blockBase = [readRasterBlock(baseImg, xStep * BlockXSize,
-                                             yStep * BlockYSize,
-                                             BlockXSize, BlockYSize, band=b + 1) 
+                blockBase = [readRasterBlock(baseImg, xStep * blockXSize,
+                                             yStep * blockYSize,
+                                             blockXSize, blockYSize, band=b + 1) 
                              for b in range(baseImg.RasterCount)]
                 
                 # Read the block from the mask 
-                blockMask = readRasterBlock(nanMask, xStep * BlockXSize,
-                                            yStep * BlockYSize,
-                                            BlockXSize, BlockYSize)
+                blockMask = readRasterBlock(nanMask, xStep * blockXSize,
+                                            yStep * blockYSize,
+                                            blockXSize, blockYSize)
                 
                 if m > 0:
                     blockMask = blockMask < m
@@ -1125,7 +1139,7 @@ def estimateRankRaster(image, deciles, densityMask, outFile,
                 ranks = estimateRank(block=blockSmooth, ref=blockBase, nodata=nodata)
                 
                 # Change the values in the output raster
-                processed.GetRasterBand(1).WriteArray(ranks, xStep * BlockXSize, yStep * BlockYSize)
+                processed.GetRasterBand(1).WriteArray(ranks, xStep * blockXSize, yStep * blockYSize)
     
     # Close the rasters
     smoothImg.FlushCache()
@@ -1239,7 +1253,9 @@ def computeAvgNdvi(root, regions, varieties, regionsIn, avgWeights, weightField=
             print('Averaging region ' + str(regions[r]) + '...')
             
             # Import all the smooth modis images on disk
-            onDisk = [f for f in os.listdir(os.path.join(root, regions[r], regionsIn)) if f.endswith('.tif')]
+            onDisk = [os.path.join(root, regions[r], regionsIn, f) 
+                      for f in os.listdir(os.path.join(root, regions[r], regionsIn)) 
+                      if f.endswith('.tif')]
             
             # Dates of these files
             datesAll = [re.search('_([0-9]{4}-[0-9]{2}-[0-9]{2})', f).group(1) for f in onDisk]
@@ -1265,7 +1281,7 @@ def computeAvgNdvi(root, regions, varieties, regionsIn, avgWeights, weightField=
                                         weightsRaster=avgW,
                                         weightField=weightField,
                                         alltouch=False,
-                                        BlockXSize=256, BlockYSize=256)
+                                        blockXSize=256, blockYSize=256)
             
             if not avgRegion:
                 break
@@ -1282,7 +1298,9 @@ def computeAvgNdvi(root, regions, varieties, regionsIn, avgWeights, weightField=
                     averages[k][regions[r] + '_' + varieties[r][v]] = s
             
     # Export the dictionary
-    outNm = 'Weighted_avg_ndvi_' + startAvg.strftime('%Y-%m-%d') + '_' + endAvg.strftime('%Y-%m-%d') + '.txt'
+    outMin = min(datesAll)
+    outMax = max(datesAll)
+    outNm = 'Weighted_avg_ndvi_' + outMin.strftime('%Y-%m-%d') + '_' + outMax.strftime('%Y-%m-%d') + '.txt'
     # Sort the dates
     datesAll.sort()
     # order the output by date in a list. Each element is an element of the original dictionary and will be exported
@@ -1297,7 +1315,7 @@ def computeAvgNdvi(root, regions, varieties, regionsIn, avgWeights, weightField=
 
 
 def avgRegionRaster(images, datesImg, weightsRaster=None, weightField=None,
-                    alltouch=False, BlockXSize=256, BlockYSize=256):
+                    alltouch=False, blockXSize=256, blockYSize=256):
     
     # Get a base image as a reference for format
     baseImg = gdal.Open(images[0])
@@ -1364,8 +1382,8 @@ def avgRegionRaster(images, datesImg, weightsRaster=None, weightField=None,
         xsize = band.XSize
         ysize = band.YSize
         # Get the number of blocks in x and y directions based on the block size
-        xBlocks = int(round(xsize / BlockXSize)) + 1
-        yBlocks = int(round(ysize / BlockYSize)) + 1
+        xBlocks = int(round(xsize / blockXSize)) + 1
+        yBlocks = int(round(ysize / blockYSize)) + 1
         band = None
         
         sumNdvi = []
@@ -1375,18 +1393,26 @@ def avgRegionRaster(images, datesImg, weightsRaster=None, weightField=None,
             for yStep in range(yBlocks):
                 
                 # Read the block from the image
-                blockBase = readRasterBlock(baseImg, xStep * BlockXSize, yStep * BlockYSize, BlockXSize, BlockYSize)
+                blockBase = readRasterBlock(baseImg,
+                                            xStep * blockXSize, yStep * blockYSize,
+                                            blockXSize, blockYSize)
                 
                 # Read the block from the weights
-                blockWeight = readRasterBlock(weightsRaster, xStep * BlockXSize, yStep * BlockYSize, BlockXSize, BlockYSize)
+                blockWeight = readRasterBlock(weightsRaster,
+                                              xStep * blockXSize, yStep * blockYSize,
+                                              blockXSize, blockYSize)
                 
                 # Recast the type to be sure
                 blockBase = blockBase.astype(np.float32)
                 blockWeight = blockWeight.astype(np.float32)
                 
                 # Replace the no data values by 0
-                blockBase[np.logical_or(np.logical_or(blockBase == nodataBase, np.isnan(blockBase)), np.logical_or(blockBase > 1, blockBase < -1))] = 0.
-                blockWeight[np.logical_or(np.logical_or(blockWeight == nodataWeights, np.isnan(blockWeight)), np.logical_or(blockWeight > 1, blockWeight < 0))] = 0.
+                blockBase[np.logical_or(
+                    np.logical_or(blockBase == nodataBase, np.isnan(blockBase)),
+                    np.logical_or(blockBase > 1, blockBase < -1))] = 0.
+                blockWeight[np.logical_or(
+                    np.logical_or(blockWeight == nodataWeights, np.isnan(blockWeight)),
+                    np.logical_or(blockWeight > 1, blockWeight < 0))] = 0.
             
                 # Estimate the weighted sum for each pixel
                 sumNdvi.append(np.sum(np.multiply(blockBase, blockWeight)))
@@ -1404,12 +1430,16 @@ def avgRegionRaster(images, datesImg, weightsRaster=None, weightField=None,
     return(average)
 
 
-def maskQualityVI(ndviRaster, qualityRaster, outRaster=None, nodata=None):
+def maskQualityVI(ndviRaster, qualityRaster, outRaster=None, nodataOut=None):
     '''
     Function to mask a composite modis ndvi image with a quality layer.
     
     Each pixel of the quality layer is converted to 16 bit to screen
     quality problems and mask pixels with low quality.
+    
+    nodataOut (num): value to use for data of low quality. Can be different 
+        from the no data value of the raster. If None, the no data value of the
+        raster is used.
     '''
     
     # Import the quality information image
@@ -1430,10 +1460,11 @@ def maskQualityVI(ndviRaster, qualityRaster, outRaster=None, nodata=None):
     ndviType = gdal.GetDataTypeName(ndvi.GetRasterBand(1).DataType)
     
     # Get the no data value
-    if not nodata:
-        nodata = ndvi.GetRasterBand(1).GetNoDataValue()
-        if not nodata:
-            nodata = 65535
+    nodataNdvi = ndvi.GetRasterBand(1).GetNoDataValue()
+    nodataQual = q.GetRasterBand(1).GetNoDataValue()
+    
+    if not nodataOut:
+        nodataOut = nodataNdvi
                     
     # Loop through the arrays to mask the ndvi
     
@@ -1441,11 +1472,11 @@ def maskQualityVI(ndviRaster, qualityRaster, outRaster=None, nodata=None):
                           flags=['reduce_ok'],
                           op_flags=[['readwrite'], ['readonly']],
                           op_dtypes=[ndviType, qType]):
-        p[...] = screenQualityVI(p, q, nodata)
+        p[...] = screenQualityVI(p, q, nodataNdvi, nodataQual, nodataOut)
     
     if outRaster:
         # Create an empty raster copy
-        out = new_raster_from_base(ndvi, outRaster, 'GTiff', nodata,
+        out = new_raster_from_base(ndvi, outRaster, 'GTiff', nodataNdvi,
                                    getattr(gdal,
                                            getGDALTypeFromNumber(
                                                ndvi.GetRasterBand(1).DataType)))
@@ -1464,21 +1495,29 @@ def maskQualityVI(ndviRaster, qualityRaster, outRaster=None, nodata=None):
     q = None
     
     
-def screenQualityVI(pixel, index, nodata):
-    # Function to screen the quality of a pixel of ndvi in composite 
-    # modis product based on quality layer.
+def screenQualityVI(pixel, index, nodataP, nodataI, nodataMask):
+    '''
+    Function to screen the quality of a pixel of ndvi in composite 
+        modis product based on quality layer.
     
-    if pixel == nodata or np.isnan(pixel):
-        return nodata
+    pixel (num): value of the pixel of the raster to mask
+    index (num): 16bit number of the quallity layer pixel
+    nodataP (num): value of the no data for the raster to mask
+    nodataI (num): value of the no data for the quality raster
+    nodataMask (num): value to use for the pixel of low quality
+    '''
+    # If no quality information return the no data value of the input
+    if index == nodataI:
+        return nodataP
     
     bit16 = np.binary_repr(index, width=16)
     
-    if (bit16[2:5] == '001' and bit16[14:16] in ['00', '01', '10'] and 
+    if not pixel == nodataI and (bit16[2:5] == '001' and bit16[14:16] in ['00', '01', '10'] and 
         bit16[9:13] in ['0000', '0001', '0010', '0011', '0100', '0101', '0111',
                         '1000']):
          p = pixel
     else:
-        p = nodata
+        p = nodataMask
     
     return(p)
 
@@ -1518,11 +1557,11 @@ def percMissingStack(images, outName, nodata=None):
     xsize = band.XSize
     ysize = band.YSize
     # Set the block size
-    BlockXSize = 256 * 4
-    BlockYSize = 256 * 4
+    blockXSize = 256 * 4
+    blockYSize = 256 * 4
     # Get the number of blocks in x and y directions
-    xBlocks = int(round(xsize / BlockXSize)) + 1
-    yBlocks = int(round(ysize / BlockYSize)) + 1
+    xBlocks = int(round(xsize / blockXSize)) + 1
+    yBlocks = int(round(ysize / blockYSize)) + 1
     
     totBlocks = xBlocks * yBlocks
     progress = 1
@@ -1532,7 +1571,7 @@ def percMissingStack(images, outName, nodata=None):
             print('Processing block ' + str(progress) + ' of ' + str(totBlocks))
             progress += 1
             
-            blocks = [readRasterBlock(p, xStep * BlockXSize, yStep * BlockYSize, BlockXSize, BlockYSize) for p in toProcess]
+            blocks = [readRasterBlock(p, xStep * blockXSize, yStep * blockYSize, blockXSize, blockYSize) for p in toProcess]
             
             # Bring the blocks together into one single array
             blocks = np.dstack(blocks)
@@ -1541,7 +1580,7 @@ def percMissingStack(images, outName, nodata=None):
             blocks = percMissing(blocks, nodataImg)
             
             # Change the values in the output raster
-            out.GetRasterBand(1).WriteArray(blocks, xStep * BlockXSize, yStep * BlockYSize)
+            out.GetRasterBand(1).WriteArray(blocks, xStep * blockXSize, yStep * blockYSize)
         
     # Close the rasters
     for p in toProcess:
@@ -1623,7 +1662,7 @@ def warp_raster(src, dst, resampleOption='nearest', outputURI=None, outFormat='M
     return rOut
 
 
-def readRasterBlock(src, xStart, yStart, xBlockSize, yBlockSize, band=1):
+def readRasterBlock(src, colStart, rowStart, colBlockSize, rowBlockSize, band=1):
     '''
     Function to read a block of data from a gdal Dataset. It will return the block as a numpy array
     
@@ -1641,20 +1680,13 @@ def readRasterBlock(src, xStart, yStart, xBlockSize, yBlockSize, band=1):
     band = src.GetRasterBand(band)
     
     # Get the size of the raster
-    xsize = band.XSize
-    ysize = band.YSize
+    colSize = band.XSize
+    rowSize = band.YSize
     
-    if yStart + yBlockSize < ysize:
-        rows = yBlockSize
-    else:
-        rows = ysize - yStart
-    
-    if xStart + xBlockSize < xsize:
-        cols = xBlockSize
-    else:
-        cols = xsize - xStart
+    rows = min(rowBlockSize, rowSize - rowStart)
+    cols = min(colBlockSize, colSize - colStart)
             
-    outArray = band.ReadAsArray(xStart, yStart, cols, rows)
+    outArray = band.ReadAsArray(colStart, rowStart, cols, rows)
     
     return outArray
 
