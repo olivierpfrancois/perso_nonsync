@@ -234,7 +234,7 @@ def main():
     
     if smooth:
         print('Starting the smoothing process')
-        md.smoothMODIS(root=dst,
+        md.smoothMODISWrapper(root=dst,
                        regions=states,
                        regionsIn=statesRawFolder,
                        regionsOut=statesSmoothFolder,

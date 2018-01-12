@@ -332,6 +332,9 @@ def gapPredict(a, i, mp, nodataIn, nodataOut=None, nTargetImage=5, nImages=4,
     
     outType = a.dtype
     
+    if not nodataOut:
+        nodataOut = nodataIn
+    
     a = a.astype(float)
     a[a == nodataIn] = np.nan
     
@@ -358,14 +361,19 @@ def gapPredict(a, i, mp, nodataIn, nodataOut=None, nTargetImage=5, nImages=4,
                       columns=["z", "rank"])
     
     # Run quantile regression
-    mod = smf.quantreg('z ~ rank', df) 
+    try:
+        mod = smf.quantreg('z ~ rank', df) 
+    except:
+        return(nodataOut)
     
     m = mod.fit(q=tau, max_iter=800, p_tol=1e-02) 
     
     # Estimate fitted value
     p = m.params['Intercept'] + m.params['rank'] * r[mp[2]]
     
-    if np.issubdtype(outType, np.integer):
+    if np.isnan(p):
+        p = nodataOut
+    elif np.issubdtype(outType, np.integer):
         p = int(p)
     
     return(p)
@@ -425,7 +433,7 @@ if __name__ == '__main__':
     gapFill(rasters=inputRasters, seasons=days, years=years,
             outFolder='/home/olivierp/jde_coffee/MODIS/collection6/Vietnam/LD/filled_missing',
             suffix='f', nodata=[-3000], iMax=np.inf,
-            subsetSeasons=None, subsetYears=None, subsetMissing=None,
+            subsetSeasons=None, subsetYears=[2008, 2009, 2010], subsetMissing=None,
             clipRange=(-2000, 10000))
     
     '''

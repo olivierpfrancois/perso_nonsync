@@ -4,12 +4,11 @@
 # and use Script Runner.
 
 """ 
-    Script to download MODIS images from the server, 
-    and mosaic the images and mask them for each region
-    to process.
+    Functions to handle the treatment of MODIS images, 
+    Including the download, mosaic, temporal smoothing and averaging.
  """
 
-# Some commonly used imports
+# Imports
 
 import pymodis as pm
 import re, os, subprocess
@@ -22,21 +21,25 @@ from csv import DictWriter
 #####################################################################################################################
 #####################################################################################################################
 #####################################################################################################################
-# #FUNCTIONS
+# FUNCTIONS
 
 
 def downloadMODIS(dstFolder, pwd, user, tiles, product, startDownload=None, endDownload=None):
     '''
-    Function to download modis images from server. Returns a list of the names of the newly downloaded files.
+    Function to download modis images from server. Returns a list of the names 
+        of the newly downloaded files.
     
-    dstFolder (str): Address of the destination folder where to save the downloaded images
+    dstFolder (str): Address of the destination folder where to save the 
+        downloaded images
     pwd (str): Password for the e4ftl01.cr.usgs.gov website
     user (str): Username for the e4ftl01.cr.usgs.gov website
     tiles (list of str): List of  tiles to download (e.g. 'h13v10')
     product (str): Product to download from server (e.g. 'MOD13Q1.006')
     startDownload (str): Start date for the product download (format YYYY-MM-DD). 
-                        If None, will default to date of most recent MODIS file on disk if any, or stop the process
-    endDownload (str): End date for the product download (format YYYY-MM-DD). If None, defaults to today
+        If None, will default to date of most recent MODIS file on disk if any, 
+        or stop the process
+    endDownload (str): End date for the product download (format YYYY-MM-DD). 
+        If None, defaults to today
     '''
     
     if not endDownload:
@@ -50,7 +53,8 @@ def downloadMODIS(dstFolder, pwd, user, tiles, product, startDownload=None, endD
     # Dates of these files
     if thereHdf:
         datesHdf = [re.search('A([0-9]{7})', f).group(1) for f in thereHdf]
-        datesHdfD = [datetime.strptime('0101' + d[0:4], "%d%m%Y").date() + timedelta(days=int(d[4:])) for d in datesHdf]
+        datesHdfD = [datetime.strptime('0101' + d[0:4], "%d%m%Y").date() + timedelta(days=int(d[4:])) 
+                     for d in datesHdf]
         # datesTif = [re.search('_([0-9]{4}-[0-9]{2}-[0-9]{2})_', f).group(1) for f in thereTif]
         # datesTif = [datetime.strptime(d, "%Y-%m-%d").date() for d in datesTif]
     else:
@@ -66,9 +70,12 @@ def downloadMODIS(dstFolder, pwd, user, tiles, product, startDownload=None, endD
         return
     
     # Download 
-    down = pm.downmodis.downModis(destinationFolder=dstFolder, password=pwd, user=user,
-                url="https://e4ftl01.cr.usgs.gov", tiles=tiles, path='MOLT', product=product,
-                today=endDownload, enddate=startDownload, jpg=False, debug=False, timeout=30, checkgdal=True)
+    down = pm.downmodis.downModis(destinationFolder=dstFolder, password=pwd,
+                                  user=user, url="https://e4ftl01.cr.usgs.gov",
+                                  tiles=tiles, path='MOLT', product=product,
+                                  today=endDownload, enddate=startDownload,
+                                  jpg=False, debug=False, timeout=30,
+                                  checkgdal=True)
     down._connectHTTP()
     down.downloadsAllDay()
     
@@ -93,25 +100,34 @@ def mosaicMODISWrapper(root, srcFolder, tmpFolder, regions, regionsOut,
                        regionsBoundaries, tiles, subset, suffix, nodataOut=None,
                        startMosaic=None, endMosaic=None):
     '''
-    Function to mosaic the tiles of modis images and clip them to a series of regions.
-    Does not return anything.
+    Function to mosaic the tiles of modis images and clip them to a series of 
+        regions. Does not return anything.
     
     root (str): Address of root folder where  regions folders are located
     srcFolder (str): Full address where the input downloaded tiles are located
-    tmpFolder (str): Full address of folder where the temporary mosaic before cutting to regions will be stored. 
-            !!!!! THIS FOLDER SHOULD BE EMPTY TO START, IT WILL BE EMPTIED AT THE END
-    regions (list of str): Names of the regions to process. Each region should have a folder inside root with the same name.  
-    regionsOut (str): Name of the folder inside the regions folders where the mosaiced and clipped images should be stored. 
-            It should be the same for all the regions
-    regionsBoundaries (list of str): List the full address of the shapefiles with the regions boundaries
+    tmpFolder (str): Full address of folder where the temporary mosaic before 
+        cutting to regions will be stored. 
+        !!!!! THIS FOLDER SHOULD BE EMPTY TO START, IT WILL BE EMPTIED AT THE END
+    regions (list of str): Names of the regions to process. Each region should 
+        have a folder inside root with the same name.  
+    regionsOut (str): Name of the folder inside the regions folders where the 
+        mosaiced and clipped images should be stored. 
+        It should be the same for all the regions
+    regionsBoundaries (list of str): List the full address of the shapefiles 
+        with the regions boundaries
     tiles (list of str): List of  tiles to mosaic (e.g. 'h13v10')
-    subset (str): string with the layers to extract from the hdf images (e.g. '1 0 0 0 0 0 0 0 0 0 0 0')
-    suffix (list): list of string, suffixes to assign for naming each of the subsets
-    nodataOut (list): None or list of the same length as suffix, with the no data value to use for each layer extracted 
+    subset (str): string with the layers to extract from the hdf images 
+        (e.g. '1 0 0 0 0 0 0 0 0 0 0 0')
+    suffix (list): list of string, suffixes to assign for naming each of the 
+        subsets
+    nodataOut (list): None or list of the same length as suffix, with the no 
+        data value to use for each layer extracted 
         when masking by the regions. Can leave one no data value as None to 
         use the no data value of the raster
-    startMosaic (str): Starting date for the files to mosaic. If None, will process all the files found on the disk.
-    endMosaic (str): Ending date for the files to mosaic. If None, defaults to today
+    startMosaic (str): Starting date for the files to mosaic. If None, will 
+        process all the files found on the disk.
+    endMosaic (str): Ending date for the files to mosaic. If None, 
+        defaults to today
     '''
     
     if not endMosaic:
@@ -127,11 +143,13 @@ def mosaicMODISWrapper(root, srcFolder, tmpFolder, regions, regionsOut,
     thereHdf = [f for f in os.listdir(srcFolder) if f.endswith('.hdf')]
     # Dates of these files
     datesHdf = [re.search('A([0-9]{7})', f).group(1) for f in thereHdf]
-    datesHdfD = [datetime.strptime('0101' + d[0:4], "%d%m%Y").date() + timedelta(days=int(d[4:]) - 1) for d in datesHdf]
+    datesHdfD = [datetime.strptime('0101' + d[0:4], "%d%m%Y").date() + timedelta(days=int(d[4:]) - 1) 
+                 for d in datesHdf]
     
     # Get the dates to process
     if startMosaic:
-        dates = {d for d, D in zip(datesHdf, datesHdfD) if D >= startMosaic and D <= endMosaic}
+        dates = {d for d, D in zip(datesHdf, datesHdfD) 
+                 if D >= startMosaic and D <= endMosaic}
     else:
         dates = {d for d, D in zip(datesHdf, datesHdfD) if D <= endMosaic}
     dates = sorted(list(dates))
@@ -152,7 +170,6 @@ def mosaicMODISWrapper(root, srcFolder, tmpFolder, regions, regionsOut,
     for d in dates:
         # Transform into actual date
         dlong = datetime.strptime(d, '%Y%j').date()
-        # dlong = datetime.strptime('0101'+d[0:4], "%d%m%Y").date()+timedelta(days=int(d[4:])-1)
         
         # Progress
         print('Processing date ' + dlong.strftime('%Y-%m-%d'))
@@ -169,12 +186,14 @@ def mosaicMODISWrapper(root, srcFolder, tmpFolder, regions, regionsOut,
             complete = any(t in f for f in files)
         
         if not complete:
-            print('Not all tiles were downloaded for date ' + dlong.strftime('%Y-%m-%d') + ". Cannot process.")
+            print('Not all tiles were downloaded for date ' + 
+                  dlong.strftime('%Y-%m-%d') + ". Cannot process.")
             continue
         
         # Create the output name for the mosaic file
         outName = re.sub('\..+', '', files[0])  # Get the product name
-        outName = (outName + '_' + dlong.strftime('%Y-%m-%d') + '_h' + '-'.join(map(str, tilesH)) + 'v' + 
+        outName = (outName + '_' + dlong.strftime('%Y-%m-%d') + '_h' + 
+                   '-'.join(map(str, tilesH)) + 'v' + 
                    '-'.join(map(str, tilesV)) + '_250m_16_days')
         
         mosaicMODIS(images=[os.path.join(srcFolder, f) for f in files],
@@ -194,8 +213,11 @@ def mosaicMODISWrapper(root, srcFolder, tmpFolder, regions, regionsOut,
                 
                 # Clip the mosaic by the extent of the the shapefile
                 clipMaskRasterByShp(shp=shp,
-                                    raster='/'.join([tmpFolder, outName + '_' + suffix[l] + '.tif']),
-                                    outRaster=root + '/' + s + '/' + regionsOut + '/' + outName + '_' + suffix[l] + '.tif',
+                                    raster='/'.join([tmpFolder, outName + '_' + 
+                                                     suffix[l] + '.tif']),
+                                    outRaster=root + '/' + s + '/' + 
+                                    regionsOut + '/' + outName + '_' + 
+                                    suffix[l] + '.tif',
                                     nodataOut=nodataOut[l])
                 
             # Remove intermediary file
@@ -209,6 +231,23 @@ def mosaicMODISWrapper(root, srcFolder, tmpFolder, regions, regionsOut,
 
 
 def mosaicMODIS(images, subset, suffixes, tempFolder, outFile):
+    '''
+    Creates mosaic from a set of MODIS images. It creates one composite 
+        image per layer selected in the subset.
+    
+    images (list): list of addresses of images to mosaic. They should be from 
+        the same dates but from different tiles.
+    subset (str): string with the layers to extract from the hdf images 
+        (e.g. '1 0 0 0 0 0 0 0 0 0 0 0')
+    suffix (list): list of string, suffixes to assign for naming each of the subsets
+    tmpFolder (str): Full address of folder where the temporary mosaic before 
+        cutting to regions will be stored. 
+        !!!!! THIS FOLDER SHOULD BE EMPTY TO START, IT WILL BE EMPTIED AT THE END
+    outFile (str): Full name of the output file. Should be complete with 
+        extension .tif. The final output will have the additional suffix for 
+        each subset
+    '''
+    
     # Export each subset layer separately
     layers = [i for i, x in enumerate(list(subset)) if x == '1']
     
@@ -242,7 +281,19 @@ def mosaicMODIS(images, subset, suffixes, tempFolder, outFile):
         os.remove(inRaster)
 
 
-def clipMaskRasterByShp(shp, raster, outRaster, nodataOut=None):
+def clipMaskRasterByShp(shp, raster, outRaster, nodataOut=None, alltouch=False):
+    '''
+    Function clips a raster by the extent of a shapefile and masks 
+        the areas outside of the polygons
+    
+    shp (str): Full address of the shapefile to clip
+    raster (str): Full address of the raster to be clipped.
+    outRaster (str): Full adress of the output raster
+    nodataOut (num): Optional no data value for the output raster. If None, 
+        will use the no data value from the input raster.
+    alltouch (bool): True/False if all the pixels touched by the polygons 
+        should be counted as covered by the polygons.
+    '''
     
     # Open the data source and read in the extent
     driver = ogr.GetDriverByName('ESRI Shapefile')
@@ -318,7 +369,12 @@ def clipMaskRasterByShp(shp, raster, outRaster, nodataOut=None):
     new_raster.GetRasterBand(1).Fill(nodataImg)
 
     # Rasterize the region into that raster
-    gdal.RasterizeLayer(new_raster, [1], maskLayer, burn_values=[1.], options=['ALL_TOUCHED=FALSE'])
+    if alltouch:
+        gdal.RasterizeLayer(new_raster, [1], maskLayer, burn_values=[1.],
+                            options=['ALL_TOUCHED=TRUE'])
+    else:
+        gdal.RasterizeLayer(new_raster, [1], maskLayer, burn_values=[1.],
+                            options=['ALL_TOUCHED=FALSE'])
     
     # Get the resulting raster band as an array
     new = new_raster.GetRasterBand(1).ReadAsArray().astype(np.float)
@@ -345,27 +401,39 @@ def clipMaskRasterByShp(shp, raster, outRaster, nodataOut=None):
     image = None
 
 
-def smoothMODIS(root, regions, regionsIn, regionsOut, startSmooth, endSmooth, regWindow, avgWindow,
+def smoothMODISWrapper(root, regions, regionsIn, regionsOut, startSmooth, endSmooth, regWindow, avgWindow,
                 startSaveSmooth=None, endSaveSmooth=None, algo='Swets'):
     '''
-    Function to do a temporal smoothing of a time series of identical images. Does not return anything, saves smoothed images on disk.
-    The input files should contain the date in their name in the format '_([0-9]{4}-[0-9]{2}-[0-9]{2})'
+    Function to do a temporal smoothing of a time series of identical images. 
+        Does not return anything, saves smoothed images on disk.
+    The input files should contain the date in their name in the format 
+        '_([0-9]{4}-[0-9]{2}-[0-9]{2})'
     The processed files will have the same name plus a 'smooth_' prefix
     
     root (str): Address of root folder where regions folders are located
-    regions (list of str): Names of the regions to process. Each region should have a folder inside root with the same name.
-    regionsIn (str): Name of the folder inside the regions folders where to find the input files to be smoothed 
+    regions (list of str): Names of the regions to process. Each region should 
+        have a folder inside root with the same name.
+    regionsIn (str): Name of the folder inside the regions folders where to 
+        find the input files to be smoothed 
             It should be the same for all the regions 
-    regionsOut (str): Name of the folder inside the regions folders where to save the smoothed images 
-            It should be the same for all the regions
-    startSmooth (str): Starting date for the files to mosaic. If None, will process all the files found on the disk.
-    endSmooth (str): Ending date for the files to mosaic. If None, defaults to today
-    regWindow (int): size of the regression window (see Swets et al. for details)
+    regionsOut (str): Name of the folder inside the regions folders where to 
+        save the smoothed images 
+        It should be the same for all the regions
+    startSmooth (str): Starting date for the files to mosaic. If None, will 
+        process all the files found on the disk.
+    endSmooth (str): Ending date for the files to mosaic. If None, defaults 
+        to today
+    regWindow (int): size of the regression window (see Swets et al. 
+        for details)
     avgWindow (int): sie of the averaging window (see Swets et al. for details)
-    startSaveSmooth (str): Starting date for the files to save. If None, will save all the processed files
-    endSaveSmooth (str): Ending date for the files to save. If None, will save all the processed files
-    algo(str): Name of algorithm to use for the smoothing. Can be Swets or Savitzky
+    startSaveSmooth (str): Starting date for the files to save. If None, will 
+        save all the processed files
+    endSaveSmooth (str): Ending date for the files to save. If None, will save 
+        all the processed files
+    algo(str): Name of algorithm to use for the smoothing. Can be Swets or 
+        Savitzky
     '''
+    
     if not endSmooth:
         endSmooth = datetime.now()
         endSmooth = endSmooth.date()
@@ -396,12 +464,14 @@ def smoothMODIS(root, regions, regionsIn, regionsOut, startSmooth, endSmooth, re
                   if f.endswith('.tif')]
         
         # Dates of these files
-        datesAll = [re.search('_([0-9]{4}-[0-9]{2}-[0-9]{2})', f).group(1) for f in onDisk]
+        datesAll = [re.search('_([0-9]{4}-[0-9]{2}-[0-9]{2})', f).group(1) 
+                    for f in onDisk]
         # Transform into date format
         datesAll = [datetime.strptime(d, '%Y-%m-%d').date() for d in datesAll]
         
         # Keep only the files and dates within the dates to process
-        onDisk = [f for f, d in zip(onDisk, datesAll) if d >= startSmooth and d <= endSmooth]
+        onDisk = [f for f, d in zip(onDisk, datesAll) 
+                  if d >= startSmooth and d <= endSmooth]
         datesAll = [d for d in datesAll if d >= startSmooth and d <= endSmooth]
         
         # Sort the two list by date
@@ -420,8 +490,31 @@ def smoothMODIS(root, regions, regionsIn, regionsOut, startSmooth, endSmooth, re
 
 def smoothSeries(inRasters, toSave, outFolder, regWindow, avgWindow,
                  algo='Swets', blockXSize=256, blockYSize=256):
+    '''
+    Implements the Swets or Savitzky temporal smoothing over a series of images.
+    The images should be provided in the correct temporal order
+    
+    The processed files will have the same name plus a 'smooth_' prefix
+    
+    inRasters (list): Full addresses of the rasters to be smoothed.
+    toSave (list): List of booleans of the same size as inRasters. 
+        For each raster, whether the smoothed version should be saved to disk 
+        or not.
+    outFolder (str): Full address of the folder where to export the smoothed 
+        rasters.
+    regWindow (int): size of the regression window (see Swets et al. 
+        for details)
+    avgWindow (int): sie of the averaging window (see Swets et al. for details)
+    algo(str): Name of algorithm to use for the smoothing. Can be Swets or 
+        Savitzky
+    blockXSize (int): X size of the block to be processed at once from the 
+        rasters (code proceeds by block for memory management).
+    blockYSize (int): Y size of the block to be processed at once from the 
+        rasters (code proceeds by block for memory management).
+    '''
+    
     if not len(inRasters) == len(toSave):
-        print('toSave should be a list of bollean with the same length as the inputs')
+        print('toSave should be a list of boolean with the same length as the inputs')
         return False
     
     # Import all the images to process in the right order
@@ -429,7 +522,9 @@ def smoothSeries(inRasters, toSave, outFolder, regWindow, avgWindow,
     
     # Get the no data value if any
     nodata = toProcess[0].GetRasterBand(1).GetNoDataValue()
-    print(inRasters[0])
+    if not nodata:
+        nodata = np.nan
+    
     # Remove rasters to save if any
     for s, f in zip(toSave, inRasters):
         if s and os.path.isfile(outFolder + '/smooth_' + os.path.basename(f)):
@@ -437,7 +532,7 @@ def smoothSeries(inRasters, toSave, outFolder, regWindow, avgWindow,
     
     # Create empty copies of these files to use for the smoothed data only for the files to save
     processed = [new_raster_from_base(p, outFolder + '/smooth_' + os.path.basename(f),
-                                      'GTiff', np.nan, gdal.GDT_Float32) 
+                                      'GTiff', nodata, gdal.GDT_Float32) 
                     if s else False for s, p, f in zip(toSave, toProcess, inRasters)]
     
     # Get the size of the rasters to identify the limits of the blocks to loop through
@@ -454,10 +549,13 @@ def smoothSeries(inRasters, toSave, outFolder, regWindow, avgWindow,
     
     for xStep in range(xBlocks):
         for yStep in range(yBlocks):
-            print('     Processing block ' + str(progress) + ' of ' + str(totBlocks))
+            print('     Processing block ' + str(progress) + ' of ' + 
+                  str(totBlocks))
             progress += 1
             
-            blocks = [readRasterBlock(p, xStep * blockXSize, yStep * blockYSize, blockXSize, blockYSize) for p in toProcess]
+            blocks = [readRasterBlock(p, xStep * blockXSize, yStep * blockYSize,
+                                      blockXSize, blockYSize) 
+                                      for p in toProcess]
             
             # Bring the blocks together into one single array
             blocks = np.dstack(blocks)
@@ -477,7 +575,8 @@ def smoothSeries(inRasters, toSave, outFolder, regWindow, avgWindow,
             blocks = np.dsplit(blocks, len(toProcess))
             for s, p, b in zip(toSave, processed, blocks):
                 if s:
-                    p.GetRasterBand(1).WriteArray(b[:, :, 0], xStep * blockXSize, yStep * blockYSize)
+                    p.GetRasterBand(1).WriteArray(b[:, :, 0], xStep * blockXSize,
+                                                  yStep * blockYSize)
     
     # Close the rasters
     for s, p in zip(toSave, processed):
@@ -492,30 +591,39 @@ def smoothSeries(inRasters, toSave, outFolder, regWindow, avgWindow,
 def smoothingSwets(block, regWindow, avgWindow, nodata=None):
     '''
     Function to do the temporal smoothing of a 3D numpy array.
-    The function will loop through all the columns in the first two dimensions, smoothing the data in the 3rd dimension.
-    The method is that of Swets et al. (1999, A weighted least-squares approach to temporal NDVI smoothing. ASPRS Annual Conference).
-    It returns an array of the same shape with smoothed values, where the no data value is np.nan.
+    The function will loop through all the columns in the first two dimensions, 
+        smoothing the data in the 3rd dimension.
+    The method is that of Swets et al. (1999, A weighted least-squares approach 
+        to temporal NDVI smoothing. ASPRS Annual Conference).
+    It returns an array of the same shape with smoothed values, 
+        where the no data value is np.nan if not provided.
+        The function assumes that numpy nan is the no data value if it is not 
+        provided.
     
-    The Swets et al. method runs a moving (weighted) regression window along the values in the input pixels. It then
-    averages the predicted values using a second moving window the get the final smoothed values.
+    The Swets et al. method runs a moving (weighted) regression window along 
+        the values in the input pixels. It then
+    averages the predicted values using a second moving window the get the 
+        final smoothed values.
     
     block (numpy array): Array to be smoothed
-    regWindow (int): size of the regression window (see Swets et al. for details)
+    regWindow (int): size of the regression window (see Swets et al. 
+        for details)
     avgWindow (int): sie of the averaging window (see Swets et al. for details)
-    nodata (int): value for the no data in the input array if any. If None, assumed to be np.nan.
-            The output array will be returned with np.nan as the no data value.
+    nodata (int): value for the no data in the input array if any. If None, 
+        assumed to be np.nan. The output array will be returned with np.nan as 
+        the no data value if nodata is not provided.
     '''
+    
     extent = block.shape
     for X in range(extent[0]):
         for Y in range(extent[1]):
             pixel = np.copy(block[X, Y, :])
             
             # Check if entire pixel vector is nan, just return it
-            if nodata and np.all(pixel == nodata):
-                pixel.fill(np.nan)
+            if ((nodata and np.all(pixel == nodata)) or 
+                np.all(np.isnan(pixel))):
+                pixel.fill(nodata)
                 block[X, Y, :] = pixel
-                continue
-            elif np.all(np.isnan(pixel)):
                 continue
             
             # Get the shape of the original data
@@ -530,7 +638,8 @@ def smoothingSwets(block, regWindow, avgWindow, nodata=None):
                 pixel[pixel == nodata] = np.nan
             
             # Interpolate missing values if any
-            # THIS SHOULD BE DONE BEFOREHAND FOR THE ENTIRE RASTER USING TEMPORAL AND SPATIAL INFERENCE
+            # THIS SHOULD BE DONE BEFOREHAND FOR THE ENTIRE RASTER USING 
+            # TEMPORAL AND SPATIAL INFERENCE
             # Get a mask of the nan values
             if np.isnan(pixel).any():
                 pixel = np.reshape(pixel, len(pixel))
@@ -548,38 +657,54 @@ def smoothingSwets(block, regWindow, avgWindow, nodata=None):
             weights = np.copy(pixel)
             weights[0, 0] = 0.5  # Assume first value is a middle point
             for i in range(1, len(pixel) - 1, 1):
-                # Local high values get a weight of 1.5, local middle values get a weight of 0.5 and local low values only 0.005
-                if pixel[i - 1, 0] < pixel[i, 0] and pixel[i, 0] > pixel[i + 1, 0]:
+                # Local high values get a weight of 1.5, local middle values 
+                # get a weight of 0.5 and local low values only 0.005
+                if (pixel[i - 1, 0] < pixel[i, 0] and 
+                    pixel[i, 0] > pixel[i + 1, 0]):
                     weights[i, 0] = 1.5
-                elif ((pixel[i - 1, 0] <= pixel[i, 0] and pixel[i, 0] <= pixel[i + 1, 0]) or (pixel[i - 1, 0] >= pixel[i, 0] and pixel[i, 0] >= pixel[i + 1, 0])):
+                elif ((pixel[i - 1, 0] <= pixel[i, 0] and 
+                       pixel[i, 0] <= pixel[i + 1, 0]) or 
+                       (pixel[i - 1, 0] >= pixel[i, 0] and 
+                        pixel[i, 0] >= pixel[i + 1, 0])):
                     weights[i, 0] = 0.5
-                elif pixel[i - 1, 0] > pixel[i, 0] and pixel[i, 0] < pixel[i + 1, 0]:
+                elif (pixel[i - 1, 0] > pixel[i, 0] and 
+                      pixel[i, 0] < pixel[i + 1, 0]):
                     weights[i, 0] = 0.005
             # For the last point
-            if pixel[len(pixel) - 1, 0] >= pixel[len(pixel) - 2, 0] and pixel[len(pixel) - 1, 0] >= pixel[len(pixel) - 3, 0]:
-                # If the last data point is greater than the previous 2, then assume it is a high point
+            if (pixel[len(pixel) - 1, 0] >= pixel[len(pixel) - 2, 0] and 
+                pixel[len(pixel) - 1, 0] >= pixel[len(pixel) - 3, 0]):
+                # If the last data point is greater than the previous 2, then 
+                # assume it is a high point
                 weights[len(pixel) - 1, 0] = 1.5
-            elif pixel[len(pixel) - 1, 0] >= pixel[len(pixel) - 2, 0] and pixel[len(pixel) - 1, 0] < pixel[len(pixel) - 3, 0]:
-                # If the last data point is greater than the previous only, then assume it is a middle point
+            elif (pixel[len(pixel) - 1, 0] >= pixel[len(pixel) - 2, 0] and 
+                  pixel[len(pixel) - 1, 0] < pixel[len(pixel) - 3, 0]):
+                # If the last data point is greater than the previous only, 
+                # then assume it is a middle point
                 weights[len(pixel) - 1, 0] = 0.5
-            elif (pixel[len(pixel) - 1, 0] < pixel[len(pixel) - 2, 0] and pixel[len(pixel) - 1, 0] >= pixel[len(pixel) - 3, 0] and 
+            elif (pixel[len(pixel) - 1, 0] < pixel[len(pixel) - 2, 0] and 
+                  pixel[len(pixel) - 1, 0] >= pixel[len(pixel) - 3, 0] and 
                   weights[len(pixel) - 3, 0] != 0.005):
-                # If less than the previous but more than the one before that is not a low point
+                # If less than the previous but more than the one before that 
+                # is not a low point
                 weights[len(pixel) - 1, 0] = 0.5
             else:
-                # If the last point is less than the last 2, or greater than only one of the two, assume it is a low point
+                # If the last point is less than the last 2, or greater than 
+                # only one of the two, assume it is a low point
                 weights[len(pixel) - 1, 0] = 0.002
             
             # Create a matrix with the data for this pixel and for the weights
             # For the data:
             # Each column will be the same
             dataRaw = np.repeat(pixel, len(pixel) + regWindow, axis=1)
-            # Set to nan all data for each column besides the data used for the regressions
-            ltri = np.tril_indices(n=len(pixel), k=-1, m=len(pixel) + regWindow)  # Lower triangle indices below the diagonal
+            # Set to nan all data for each column besides the data used for the 
+            # regressions
+            # Lower triangle indices below the diagonal
+            ltri = np.tril_indices(n=len(pixel), k=-1, m=len(pixel) + regWindow)
             dataRaw[ltri] = np.nan
             utri = np.triu_indices(n=len(pixel), k=0, m=len(pixel))
             dataRaw[:, (regWindow):][utri] = np.nan
-            # Remove the first two and last 3 columns, since they don't have enough points for a regression
+            # Remove the first two and last 3 columns, since they don't have 
+            # enough points for a regression
             dataRaw = dataRaw[:, 2:(len(pixel) + regWindow - 3)]
             
             # For the weights:
@@ -599,17 +724,25 @@ def smoothingSwets(block, regWindow, avgWindow, nodata=None):
                 x = x.astype(np.float32)
                 x = np.reshape(x, y.shape)
                 # Estimate potential outliers
-                out = np.divide(np.absolute(y - np.mean(y)), np.std(y))  # Will be an outlier if greater than 3 (only extreme outliers should be picked up)
+                # Will be an outlier if greater than 3 (only extreme outliers 
+                # should be picked up)
+                out = np.divide(np.absolute(y - np.mean(y)), np.std(y))
                 out = np.reshape(out, y.shape)
                 # Remove outliers before regression
                 yout = y[out < 3]
                 wout = w[out < 3]
                 xout = x[out < 3]
                 # Compute parameters of regression
-                numerator = np.sum(wout) * np.sum(np.multiply(np.multiply(wout, xout), yout)) - np.sum(np.multiply(wout, yout)) * np.sum(np.multiply(wout, xout))
-                denominator = np.sum(wout) * np.sum(np.multiply(wout, np.square(xout))) - np.square(np.sum(np.multiply(wout, xout)))
+                numerator = (np.sum(wout) * 
+                             np.sum(np.multiply(np.multiply(wout, xout), yout)) - 
+                             np.sum(np.multiply(wout, yout)) * 
+                             np.sum(np.multiply(wout, xout)))
+                denominator = (np.sum(wout) * 
+                               np.sum(np.multiply(wout, np.square(xout))) - 
+                               np.square(np.sum(np.multiply(wout, xout))))
                 b = np.divide(numerator, denominator)
-                numerator = (np.sum(np.multiply(wout, yout)) - b * np.sum(np.multiply(wout, xout)))
+                numerator = (np.sum(np.multiply(wout, yout)) - b * 
+                             np.sum(np.multiply(wout, xout)))
                 denominator = np.sum(wout)
                 a = np.divide(numerator, denominator)
                 # Compute the predicted values from the regression
@@ -628,13 +761,17 @@ def smoothingSwets(block, regWindow, avgWindow, nodata=None):
                     center = int(np.floor(regWindow / 2.)) - (regWindow - len(x))
                     res = np.mean(x[max(0, center - t):max(1, center + t + 1)])
                 elif i == len(pixel) - 1:
-                    res = np.mean(x[(int(np.floor(regWindow / 2.)) - t - 1):(int(np.floor(regWindow / 2.)) + t + 1)])
+                    res = np.mean(
+                        x[(int(np.floor(regWindow / 2.)) - t - 1):(int(np.floor(regWindow / 2.)) + t + 1)])
                 else:
-                    res = np.mean(x[(int(np.floor(regWindow / 2.)) - t):(int(np.floor(regWindow / 2.)) + t + 1)])    
+                    res = np.mean(
+                        x[(int(np.floor(regWindow / 2.)) - t):(int(np.floor(regWindow / 2.)) + t + 1)])
                 smoothed.append(res)
             
             smoothed = np.asarray(smoothed)
             smoothed = np.reshape(smoothed, originShape)
+            
+            smoothed[np.isnan(smoothed)] = nodata
             
             block[X, Y, :] = smoothed
     
@@ -644,29 +781,36 @@ def smoothingSwets(block, regWindow, avgWindow, nodata=None):
 def smoothingSavitzky(block, nodata=None):
     '''
     Function to do the temporal smoothing of a 3D numpy array.
-    The function will loop through all the columns in the first two dimensions, smoothing the data in the 3rd dimension.
-    The method is that of Savitzky-Golay, using a window of 7 and a 2nd order polynomial.
-    It returns an array of the same shape with smoothed values, where the no data value is np.nan.
+    The function will loop through all the columns in the first two dimensions, 
+        smoothing the data in the 3rd dimension.
+    The method is that of Savitzky-Golay, using a window of 7 and a 2nd order 
+        polynomial.
+    It returns an array of the same shape with smoothed values, 
+        where the no data value is np.nan if not provided.
+        The function assumes that numpy nan is the no data value if it is not 
+        provided.
     
-    The Savitzky-Golay method runs a moving (weighted) window along the values in the input pixels. It simply 
+    The Savitzky-Golay method runs a moving (weighted) window along the 
+        values in the input pixels. It simply 
     averages the values in the window to predict the output value.
     A window of 7 is still used for edages, but different weights are applied.
     
     block (numpy array): Array to be smoothed
-    nodata (int): value for the no data in the input array if any. If None, assumed to be np.nan.
-            The output array will be returned with np.nan as the no data value.
+    nodata (int): value for the no data in the input array if any. If None, 
+        assumed to be np.nan. The output array will be returned with np.nan as 
+        the no data value if nodata is not provided.
     '''
+    
     extent = block.shape
     for X in range(extent[0]):
         for Y in range(extent[1]):
             pixel = np.copy(block[X, Y, :])
             
             # Check if entire pixel vector is nan, just return it
-            if nodata and np.all(pixel == nodata):
+            if ((nodata and np.all(pixel == nodata)) or 
+                np.all(np.isnan(pixel))):
                 pixel.fill(np.nan)
                 block[X, Y, :] = pixel
-                continue
-            elif np.all(np.isnan(pixel)):
                 continue
             
             # Get the shape of the original data
@@ -692,7 +836,8 @@ def smoothingSavitzky(block, nodata=None):
             for _ in range(3):
                 # Take a first smoothing of the pixel
                 smoothed = savitzkyAvg(toSmooth)
-                # Replace the values that are lower in the original pixel by the values in the original smoothed pixel
+                # Replace the values that are lower in the original pixel by 
+                # the values in the original smoothed pixel
                 np.copyto(toSmooth, smoothed, where=toSmooth < smoothed)
             
             # Replace the smoothed values in the original pixel
@@ -712,6 +857,8 @@ def smoothingSavitzky(block, nodata=None):
             # Reshape
             pixel = np.reshape(pixel, originShape)
             
+            pixel[np.isnan(pixel)] = nodata
+            
             # Replace the smoothed pixel in the block
             block[X, Y, :] = pixel
     
@@ -719,7 +866,12 @@ def smoothingSavitzky(block, nodata=None):
 
 
 def savitzkyAvg(pixel):
-    # This function averages a pixel using a window 7 for the Savitzky Golay and returns a pixel of the same shape
+    '''
+    This function averages a multi-dates pixel using a window 7 for the 
+        Savitzky Golay and returns a pixel of the same shape
+    
+    pixel (numpy array): Numpy vector to be averaged along using Savitzky Golay.
+    '''
     
     out = np.copy(pixel)
     
@@ -755,38 +907,52 @@ def savitzkyAvg(pixel):
 
 def createBaseline(root, regions, varieties, regionsIn, regionsOut, startRef, endRef, mask=None, outModelRaster=None):
     '''
-    Function to create baseline images with the decile values over the period of interest. 
+    Function to create baseline images with the decile values over the period 
+        of interest. 
     Does not return anything, saves baselines images on disk (10 layer rasters).
     The input files should come from the smoothing process of modis data.
     
     root (str): Address of root folder where regions folders are located
-    regions (list of str): Names of the regions to process. Each region should have a folder inside root with the same name.
-    varieties (list of lists): varieties to consider for each region. The function will create a series of baselines for 
-            each regions and each varieties for that region. The name of the variety will be used to name the baselines.
-            Elements in the list of lists are string, for example [['arabica','robusta'],['arabica'],...]
-    regionsIn (str): Name of the folder inside the regions folders where to find the input modis rasters to 
-            be used for the baselines. These files are outputs of the smoothing. 
-            It should be the same for all the regions 
-    regionsOut (str): Name of the folder inside the regions folders where to save the baselines images 
-            It should be the same for all the regions
-    startRef (str): Starting year for the files to consider for the baseline (included).
-    endRef (str): Ending year for the files to consider for the baseline (included).
-    mask (list of lists): None or list of lists of full addresses of the masks (.tif) to use for each of the regions and varieties.
-            Each list element of the overall list should have the same length as the corresponding list for varieties or be None/empty.
-            The masks should be at the same resolution and stack perfectly with the modis images.
-            If None, no masking will be done.
-    outModelRaster (list of lists): None or list of lists of full addresses of the rasters (.tif) to use as model for the output.
-            or each of the regions and varieties.
-        
+    regions (list of str): Names of the regions to process. Each region 
+        should have a folder inside root with the same name.
+    varieties (list of lists): varieties to consider for each region. 
+        The function will create a series of baselines for each regions and 
+        each varieties for that region. The name of the variety will be used 
+        to name the baselines.
+        Elements in the list of lists are string, for example 
+        [['arabica','robusta'],['arabica'],...].
+    regionsIn (str): Name of the folder inside the regions folders where to 
+        find the input modis rasters to be used for the baselines. 
+        These files are outputs of the smoothing. 
+        It should be the same for all the regions.
+    regionsOut (str): Name of the folder inside the regions folders where to 
+        save the baselines images.
+        It should be the same for all the regions.
+    startRef (str): Starting year for the files to consider for the baseline 
+        (included).
+    endRef (str): Ending year for the files to consider for the baseline 
+        (included).
+    mask (list of lists): None or list of lists of full addresses of the masks 
+        (.tif) to use for each of the regions and varieties.
+        Each list element of the overall list should have the same length as 
+        the corresponding list for varieties or be None/empty.
+        The masks should be at the same resolution and stack perfectly with 
+        the modis images.
+        If None, no masking will be done.
+    outModelRaster (list of lists): None or list of lists of full addresses of 
+        the rasters (.tif) to use as model for the output.
+        or each of the regions and varieties.
     '''
     
     # Loop through the regions
     for r in range(len(regions)):
         # Get the names of all the smoothed rasters on file
-        onDisk = [f for f in os.listdir(os.path.join(root, regions[r], regionsIn)) if f.endswith('.tif')]
+        onDisk = [f for f in os.listdir(os.path.join(root, regions[r], regionsIn)) 
+                  if f.endswith('.tif')]
         
         # Dates of these files
-        datesAll = [re.search('_([0-9]{4}-[0-9]{2}-[0-9]{2})', f).group(1) for f in onDisk]
+        datesAll = [re.search('_([0-9]{4}-[0-9]{2}-[0-9]{2})', f).group(1) 
+                    for f in onDisk]
         # Transform into date format
         datesAll = [datetime.strptime(d, '%Y-%m-%d').date() for d in datesAll]
         
@@ -800,7 +966,8 @@ def createBaseline(root, regions, varieties, regionsIn, regionsOut, startRef, en
             # Loop through the dates to create a baseline raster for each
             for d in days:
                 # Get the names of all the rasters for this date
-                dates = [datetime(y, 1, 1).date() + timedelta(days=d - 1) for y in range(startRef, endRef + 1, 1)]
+                dates = [datetime(y, 1, 1).date() + timedelta(days=d - 1) for 
+                         y in range(startRef, endRef + 1, 1)]
                 # dates = [datetime.strptime('0101'+str(y), '%d%m%Y').date()+timedelta(days=d-1) for y in range(startRef,endRef+1,1)]
                 files = [f for f, date in zip(onDisk, datesAll) if date in dates]
                 
@@ -831,9 +998,27 @@ def createBaseline(root, regions, varieties, regionsIn, regionsOut, startRef, en
 
 
 def createDecileRaster(images, outFile, mask=None, outModelRaster=None, blockXSize=256, blockYSize=256):
+    '''
+    Takes a set of images that perfectly overlap (from different dates) and 
+    create an output image with 10 layers, each of which has the value of 
+    a decile for each pixel.
+    
+    images (list):Full addresses of the images to be used as reference for the 
+        calculation of the deciles.
+    outFile (str): Full address of the output decile raster.
+    mask (str): None or full address of the mask to be used over the images for 
+        where to calculate the decile references.
+    outModelRaster (str): None or full address of the raster to use 
+        as model for the output. In that case the output raster will 
+        be warped using that raster as model before export.
+    blockXSize (int): X size of the block to be processed at once from the 
+        rasters (code proceeds by block for memory management).
+    blockYSize (int): Y size of the block to be processed at once from the 
+        rasters (code proceeds by block for memory management).
+    '''
     
     # Import all the images to use for estimating the deciles
-    toProcess = [gdal.Open(os.path.join(root, regions[r], regionsIn, f)) for f in images]
+    toProcess = [gdal.Open(f) for f in images]
     
     # Mask if there is a mask
     if mask:
@@ -927,6 +1112,16 @@ def createDecileRaster(images, outFile, mask=None, outModelRaster=None, blockXSi
 
 
 def estimateDeciles(block, nodata):
+    '''
+    Takes a block of data (numpy array) with 3 dimensions and estimates for
+    each pixel in the third dimension value of the deciles.
+    the function returns a block with the same number of pixels and 10 layers, 
+    one for each decile.
+    
+    block (array): 3D numpy array with the pixels to process
+    nodata (num): value to be considered as no data when processing the pixels.
+    '''
+    
     extent = block.shape
     deciles = np.empty((extent[0], extent[1], 10))
 
@@ -959,34 +1154,46 @@ def estimateDeciles(block, nodata):
 
 def rankDatesDeciles(root, regions, varieties, regionsIn, refDecilesIn, startRank, endRank, mask, minDensity=None):
     '''
-    Function to rank each pixel of an image based on the baseline for the same day of year.
+    Function to rank each pixel of an image based on the baseline for the 
+        same day of year.
     Does not return anything, saves ranked image on disk.
     The input files should come from the smoothing and baseline functions.
     
     root (str): Address of root folder where regions folders are located
-    regions (list of str): Names of the regions to process. Each region should have a folder inside root with the same name.
-    varieties (list of lists): varieties to consider for each region. The function will create a series of baselines for 
-            each regions and each varieties for that region. The name of the variety will be used to name the baselines.
-            Elements in the list of lists are string, for example [['arabica','robusta'],['arabica'],...]
-    regionsIn (str): Name of the folder inside the regions folders where to find the input modis rasters to 
-            be used for the ranking. These files are outputs of the smoothing. 
-            It should be the same for all the regions 
-    refDecilesIn (str): Name of the folder inside the regions folders where to find the input baseline rasters to 
-            be used for the ranking. These files are outputs of the baseline creation. 
-            It should be the same for all the regions 
-    regionsOut (str): Name of the folder inside the regions folders where to save the baselines images 
-            It should be the same for all the regions
+    regions (list of str): Names of the regions to process. Each region should 
+        have a folder inside root with the same name.
+    varieties (list of lists): varieties to consider for each region. 
+        The function will create a series of baselines for 
+        each regions and each varieties for that region. The name of the 
+        variety will be used to name the baselines.
+        Elements in the list of lists are string, for example 
+        [['arabica','robusta'],['arabica'],...]
+    regionsIn (str): Name of the folder inside the regions folders where to 
+        find the input modis rasters to be used for the ranking. These files 
+        are outputs of the smoothing. It should be the same for all the regions 
+    refDecilesIn (str): Name of the folder inside the regions folders where 
+        to find the input baseline rasters to be used for the ranking. 
+        These files are outputs of the baseline creation. 
+        It should be the same for all the regions 
+    regionsOut (str): Name of the folder inside the regions folders where to 
+        save the baselines images 
+        It should be the same for all the regions
     startRank (str): Starting date for the files to rank (included).
     endRank (str): Ending date for the files to rank (included).
-    mask (list of lists): None or list of lists of full paths of the masks (.tif) to use for each of the regions and varieties.
-            Each list element of the overall list should have the same length as the corresponding list for varieties or be None/empty.
-            The masks should be at the same resolution and stack perfectly with the modis images.
-            The mask should contain for each pixel either nodata or the density of the crop masked in the pixel (0 < d < 1).
-            If None, no masking will be done.
-    minDensity (decimal): None or list of values between 0 and 1. Minimum density of crop of interest to filter out pixels in the ranking. 
-            All pixels with less than these densities will be masked, with one output per density.
-            None by default (no masking).
-        
+    mask (list of lists): None or list of lists of full paths of the masks 
+        (.tif) to use for each of the regions and varieties.
+        Each list element of the overall list should have the same length as 
+        the corresponding list for varieties or be None/empty.
+        The masks should be at the same resolution and stack perfectly with 
+        the modis images.
+        The mask should contain for each pixel either nodata or the density of 
+        the crop masked in the pixel (0 < d < 1).
+        If None, no masking will be done.
+    minDensity (decimal): None or list of values between 0 and 1. Minimum 
+        density of crop of interest to filter out pixels in the ranking. 
+        All pixels with less than these densities will be masked, with one 
+        output per density.
+        None by default (no masking).
     '''
     
     # Transform into date format
@@ -1054,11 +1261,34 @@ def rankDatesDeciles(root, regions, varieties, regionsIn, refDecilesIn, startRan
                                    blockXSize=256, blockYSize=256)
 
 
-def estimateRankRaster(image, deciles, densityMask, outFile,
+def estimateRankRaster(image, deciles, outFile, densityMask=None,
                        minDensity=None, blockXSize=256, blockYSize=256):
+    '''
+    Function takes an image and a raster with the reference deciles for that 
+    image (from estimateDeciles) and returns for each pixel its position
+    compared to the decile values using estimateRank. 
+    The image and the reference deciles raster can have different resolutions, 
+    in which case teh resolution of th eimage will be matched to the resolution 
+    of the deciles raster.
     
-    # Import the mask
-    nanMask = gdal.Open(densityMask)
+    image (str): Full address of the image to be ranked.
+    deciles (str): Full address of the image containing the reference 
+        deciles for that image.
+    densityMask (str): None or mask to be used for where to compare the image 
+        to the deciles based on the density information in the mask. 
+        Only the pixels with a minimum density of minDensity will be ranked.
+    outFile (str): Full address of the output file.
+    minDensity (list): None or list of density values to be used as threshold 
+        for ranking. There will be one output per minimum value
+    blockXSize (int): X size of the block to be processed at once from the 
+        rasters (code proceeds by block for memory management).
+    blockYSize (int): Y size of the block to be processed at once from the 
+        rasters (code proceeds by block for memory management).
+    '''
+    
+    if densityMask:
+        # Import the mask
+        nanMask = gdal.Open(densityMask)
     
     # Import the image to rank
     smoothImg = gdal.Open(image)
@@ -1086,8 +1316,12 @@ def estimateRankRaster(image, deciles, densityMask, outFile,
     yBlocks = int(round(ysize / blockYSize)) + 1
     band = None
     
-    if not minDensity:
+    if not densityMask:
         minDensity = [0]
+    
+    else:
+        if not minDensity:
+            minDensity = [0]
     
     for m in minDensity:
         if m >= 1 or m < 0:
@@ -1116,20 +1350,23 @@ def estimateRankRaster(image, deciles, densityMask, outFile,
                                              blockXSize, blockYSize, band=b + 1) 
                              for b in range(baseImg.RasterCount)]
                 
-                # Read the block from the mask 
-                blockMask = readRasterBlock(nanMask, xStep * blockXSize,
-                                            yStep * blockYSize,
-                                            blockXSize, blockYSize)
-                
-                if m > 0:
-                    blockMask = blockMask < m
-                
                 # Bring the blocks together into one single array
                 blockBase = np.dstack(blockBase)
                 
-                # Apply the mask
-                blockSmooth[blockMask] = np.nan
-                blockBase[blockMask] = np.nan
+                if densityMask:
+                    # Read the block from the mask 
+                    blockMask = readRasterBlock(nanMask, xStep * blockXSize,
+                                                yStep * blockYSize,
+                                                blockXSize, blockYSize)
+                
+                    if m > 0:
+                        blockMask = blockMask < m
+                    elif m == 0:
+                        blockMask = blockMask <= m
+                    
+                    # Apply the mask
+                    blockSmooth[blockMask] = np.nan
+                    blockBase[blockMask] = np.nan
                 
                 # Recast the type to be sure
                 blockSmooth = blockSmooth.astype(np.float32)
@@ -1142,15 +1379,31 @@ def estimateRankRaster(image, deciles, densityMask, outFile,
                 processed.GetRasterBand(1).WriteArray(ranks, xStep * blockXSize, yStep * blockYSize)
     
     # Close the rasters
-    smoothImg.FlushCache()
     smoothImg = None
-    baseImg.FlushCache()
     baseImg = None
     processed.FlushCache()
     processed = None
+    
+    if densityMask:
+        nanMask = None
 
 
 def estimateRank(block, ref, nodata):
+    '''
+    Takes a block of data (array) from an image and rank each pixel against 
+    a block of reference data with the deciles. 
+    The pixel is ranked as -3, -2, -3, 10, 20, ..., 100, and 110. 
+    110 is if the pixel is above the max decile value
+    10 the pixel is at the min value exactly, -1 it is between the min and 
+    0.75 of the mean, -2 between 0.75 and 0.5 of the mean, and finally -3 if
+    less tha 0.5 the min.
+    
+    block (array): array of pixels to be ranked
+    ref (array): array of reference decile values, should have same dimensions 
+        as block but with 10 layers in third dimension
+    nodata (num): value to be considered as no data, so not ranked.
+    '''
+    
     extent = block.shape
     ranking = np.empty((extent[0], extent[1]), dtype=int)
     
@@ -1206,24 +1459,34 @@ def computeAvgNdvi(root, regions, varieties, regionsIn, avgWeights, weightField=
     The input files should come from the smoothing function.
     
     root (str): Address of root folder where regions folders are located
-    regions (list of str): Names of the regions to process. Each region should have a folder inside root with the same name.
-    varieties (list of lists): varieties to consider for each region. The function will create a series of baselines for 
-            each regions and each varieties for that region. The name of the variety will be used to name the baselines.
-            Elements in the list of lists are string, for example [['arabica','robusta'],['arabica'],...]
-    regionsIn (str): Name of the folder inside the regions folders where to find the input modis rasters to 
-            be used for the averaging. These files are outputs of the smoothing. 
-            It should be the same for all the regions 
-    avgWeights (str): Raster (single layer) or shapefile with the weights to use for the averages. If shapefile, will be rasterized. 
-            If raster, will be resampled to the correct resolution if needed. In each case the information in each 
-            pixel/polygon should be a density of crop of interest (0 < d < 1).
-    weightField (str): Only used if avgWeights is a shapefile. Name of the field containing the weight/density information
-    startAvg (str): Starting date for the files to consider in the averaging (included). There will be one value per date.
-    endAvg (str): Ending date for the files to consider in the averaging (included).
-    alltouch (boolean): true or false, whether all the pixels touched by the region should be considered in the average or 
-            only the pixels with their centroid inside the region.
-            This parameter is used when rasterizing the shapefile with the weights and will therefore only be used if 
-            avgWeights is a shapefile.
-        
+    regions (list of str): Names of the regions to process. Each region should 
+        have a folder inside root with the same name.
+    varieties (list of lists): varieties to consider for each region. The 
+        function will create a series of baselines for each regions and each 
+        varieties for that region. The name of the variety will be used to 
+        name the baselines.
+        Elements in the list of lists are string, for example 
+        [['arabica','robusta'],['arabica'],...]
+    regionsIn (str): Name of the folder inside the regions folders where to 
+        find the input modis rasters to be used for the averaging. These 
+        files are outputs of the smoothing. 
+        It should be the same for all the regions.
+    avgWeights (str): Raster (single layer) or shapefile with the weights 
+        to use for the averages. If shapefile, will be rasterized. 
+        If raster, will be resampled to the correct resolution if needed. 
+        In each case the information in each pixel/polygon should be a density 
+        of crop of interest (0 < d < 1).
+    weightField (str): Only used if avgWeights is a shapefile. Name of the 
+        field containing the weight/density information.
+    startAvg (str): Starting date for the files to consider in the averaging 
+        (included). There will be one value per date.
+    endAvg (str): Ending date for the files to consider in the averaging 
+        (included).
+    alltouch (boolean): true or false, whether all the pixels touched by the 
+        region should be considered in the average or only the pixels with 
+        their centroid inside the region.
+        This parameter is used when rasterizing the shapefile with the 
+        weights and will therefore only be used if avgWeights is a shapefile.
     '''
     
     # Transform into date format
@@ -1316,54 +1579,81 @@ def computeAvgNdvi(root, regions, varieties, regionsIn, avgWeights, weightField=
 
 def avgRegionRaster(images, datesImg, weightsRaster=None, weightField=None,
                     alltouch=False, blockXSize=256, blockYSize=256):
+    '''
+    Takes a set of images and computes the average using the weights in 
+    weightsRaster if any for each of them.
+    Returns a dictionary with the average value for each image. The dictionary 
+    keys are the dates of the images as provided in datesImg
     
-    # Get a base image as a reference for format
-    baseImg = gdal.Open(images[0])
+    images (list): list of full addresses of images to average.
+    datesImg (list): list of the same length as images, providing for each
+        the date of the image (or some unique index). They should be unique.
+    weightsRaster (str): Raster (single layer) or shapefile with the weights 
+        to use for the averages. If shapefile, will be rasterized. 
+        If raster, will be resampled to the correct resolution if needed. 
+        In each case the information in each pixel/polygon should be a density 
+        of crop of interest (0 < d < 1).
+    weightField (str): Only used if avgWeights is a shapefile. Name of the 
+        field containing the weight/density information.
+    alltouch (boolean): true or false, whether all the pixels touched by the 
+        region should be considered in the average or only the pixels with 
+        their centroid inside the region.
+        This parameter is used when rasterizing the shapefile with the 
+        weights and will therefore only be used if avgWeights is a shapefile.
+    blockXSize (int): X size of the block to be processed at once from the 
+        rasters (code proceeds by block for memory management).
+    blockYSize (int): Y size of the block to be processed at once from the 
+        rasters (code proceeds by block for memory management).
+    '''
     
-    # Rasterize the gridded weights if needed or simply import it
-    if weightsRaster.endswith('.shp'):
-        if not weightField:
-            print('The name of the field with the densities needs to be specified to average')
-            return(False)
+    if weightRaster:
+        # Get a base image as a reference for format
+        baseImg = gdal.Open(images[0])
         
-        # Import the vector layer
-        # Open the shapefile
-        driver = ogr.GetDriverByName('ESRI Shapefile')
-        dataSource = driver.Open(weightsRaster, 0)  # 0 means read-only. 1 means writeable.
+        # Rasterize the gridded weights if needed or simply import it
+        if weightsRaster.endswith('.shp'):
+            if not weightField:
+                print('The name of the field with the densities needs to be specified to average')
+                return(False)
+            
+            # Import the vector layer
+            # Open the shapefile
+            driver = ogr.GetDriverByName('ESRI Shapefile')
+            dataSource = driver.Open(weightsRaster, 0)  # 0 means read-only. 1 means writeable.
+            
+            # Create layer
+            inVecLayer = dataSource.GetLayer(0)
+            
+            # Prepare an empty raster to rasterize the shapefile
+            weightsRaster = new_raster_from_base(baseImg, 'temp', 'MEM', -1, gdal.GDT_Float32) 
+            
+            # Transform alltouch
+            if alltouch:
+                alltouch = 'TRUE'
+            else:
+                alltouch = 'FALSE'
+            
+            # Rasterize the vector layer:
+            gdal.RasterizeLayer(weightsRaster, [1], inVecLayer,
+                                options=['ALL_TOUCHED=' + alltouch, 'ATTRIBUTE=' + weightField])
+            
+            inVecLayer = None
+            
+        elif weightsRaster.endswith(('.tif', '.TIF')):
+            weightsRaster = gdal.Open(weightsRaster)
+            
+            # Change the resolution of the raster to match the images if needed
+            
+            geoSmooth = weightsRaster.GetGeoTransform()
+            geoBase = baseImg.GetGeoTransform()
+            reproject = [1 for a, b in zip(geoSmooth, geoBase) if not a == b]
+            if reproject:
+                weightsRaster = warp_raster(weightsRaster, baseImg, resampleOption='nearest', outputURI=None, outFormat='MEM')
         
-        # Create layer
-        inVecLayer = dataSource.GetLayer(0)
-        
-        # Prepare an empty raster to rasterize the shapefile
-        weightsRaster = new_raster_from_base(baseImg, 'temp', 'MEM', -1, gdal.GDT_Float32) 
-        
-        # Transform alltouch
-        if alltouch:
-            alltouch = 'TRUE'
-        else:
-            alltouch = 'FALSE'
-        
-        # Rasterize the vector layer:
-        gdal.RasterizeLayer(weightsRaster, [1], inVecLayer,
-                            options=['ALL_TOUCHED=' + alltouch, 'ATTRIBUTE=' + weightField])
-        
-        inVecLayer = None
-        
-    elif weightsRaster.endswith(('.tif', '.TIF')):
-        weightsRaster = gdal.Open(weightsRaster)
-        
-        # Change the resolution of the raster to match the images if needed
-        
-        geoSmooth = weightsRaster.GetGeoTransform()
-        geoBase = baseImg.GetGeoTransform()
-        reproject = [1 for a, b in zip(geoSmooth, geoBase) if not a == b]
-        if reproject:
-            weightsRaster = warp_raster(weightsRaster, baseImg, resampleOption='nearest', outputURI=None, outFormat='MEM')
+        baseImg = None
+        nodataWeights = weightsRaster.GetRasterBand(1).GetNoDataValue()
     
-    baseImg = None
-    nodataWeights = weightsRaster.GetRasterBand(1).GetNoDataValue()
-    
-    # Prepare an empty dictionary to holde the results
+    # Prepare an empty dictionary to hold the results
     average = {}
     
     # Loop through the images to compute the average for each
@@ -1397,27 +1687,41 @@ def avgRegionRaster(images, datesImg, weightsRaster=None, weightField=None,
                                             xStep * blockXSize, yStep * blockYSize,
                                             blockXSize, blockYSize)
                 
-                # Read the block from the weights
-                blockWeight = readRasterBlock(weightsRaster,
-                                              xStep * blockXSize, yStep * blockYSize,
-                                              blockXSize, blockYSize)
-                
                 # Recast the type to be sure
                 blockBase = blockBase.astype(np.float32)
-                blockWeight = blockWeight.astype(np.float32)
                 
                 # Replace the no data values by 0
                 blockBase[np.logical_or(
                     np.logical_or(blockBase == nodataBase, np.isnan(blockBase)),
                     np.logical_or(blockBase > 1, blockBase < -1))] = 0.
-                blockWeight[np.logical_or(
-                    np.logical_or(blockWeight == nodataWeights, np.isnan(blockWeight)),
-                    np.logical_or(blockWeight > 1, blockWeight < 0))] = 0.
-            
+                
+                if weightsRaster:
+                    # Read the block from the weights
+                    blockWeight = readRasterBlock(weightsRaster,
+                                                  xStep * blockXSize, yStep * blockYSize,
+                                                  blockXSize, blockYSize)
+                    
+                    # Recast the type to be sure
+                    blockWeight = blockWeight.astype(np.float32)
+                
+                    # Replace the no data values by 0
+                    blockWeight[np.logical_or(
+                        np.logical_or(blockWeight == nodataWeights, np.isnan(blockWeight)),
+                        np.logical_or(blockWeight > 1, blockWeight < 0))] = 0.
+                    
+                    # Set the no data values in the image as zero weight
+                    blockWeight[blockBase == 0.] = 0.
+                    
+                else:
+                    blockWeight = np.copy(blockBase)
+                    
+                    # Replace the non 0 data values by 1
+                    blockWeight[blockWeight != 0.] = 1.
+                
                 # Estimate the weighted sum for each pixel
                 sumNdvi.append(np.sum(np.multiply(blockBase, blockWeight)))
                 sumWeights.append(np.sum(blockWeight))
-                
+        
         # Combine for the entire image
         sumNdvi = np.sum(sumNdvi) / np.sum(sumWeights)
         
@@ -1437,6 +1741,12 @@ def maskQualityVI(ndviRaster, qualityRaster, outRaster=None, nodataOut=None):
     Each pixel of the quality layer is converted to 16 bit to screen
     quality problems and mask pixels with low quality.
     
+    ndviRaster (str): Full address of the raster with the ndvi or other value
+        of interest.
+    qualityRaster (str): Full address of the raster with the quality 
+        information as provided in MODIS data.
+    outRaster (str): Full address for the output raster. If None, the input 
+        raster is overwritten.
     nodataOut (num): value to use for data of low quality. Can be different 
         from the no data value of the raster. If None, the no data value of the
         raster is used.
@@ -1506,6 +1816,7 @@ def screenQualityVI(pixel, index, nodataP, nodataI, nodataMask):
     nodataI (num): value of the no data for the quality raster
     nodataMask (num): value to use for the pixel of low quality
     '''
+    
     # If no quality information return the no data value of the input
     if index == nodataI:
         return nodataP
@@ -1529,6 +1840,11 @@ def percMissingStack(images, outName, nodata=None):
     
     A no data value should be specified if it is missing from the rasters
     The no data value should be the same for all the rasters
+    
+    images (list): List of full addressesof the images
+    outName (str): Full address for the output raster (each pixel will hold 
+        a % of non missing values
+    nodata (num): no data value. Value of the missing data.
     '''
     
     # Import all the images
@@ -1598,6 +1914,7 @@ def percMissing(block, nodata):
     block (numpy array): Array to be processed
     nodata (int): value for the no data in the input array.
     '''
+    
     extent = block.shape
     outBlock = np.ones(extent[0:2], dtype=float)
     tot = float(extent[2])
@@ -1615,26 +1932,29 @@ def percMissing(block, nodata):
 
 
 def warp_raster(src, dst, resampleOption='nearest', outputURI=None, outFormat='MEM'):
-    """
-    ---------------------------------------------------------------------------------------------
+    '''
     Function : Warp a source raster to the resolution, extent and projection of a destination raster.
            
-            The function returns the resulting raster. If outFormat is different from 'MEM', the 
-            raster is also saved to disk using the information provided in outputURI.
+    The function returns the resulting raster. If outFormat is different from 'MEM', the 
+    raster is also saved to disk using the information provided in outputURI.
+    
+    
+    src (gdal Dataset): source raster to be warped
+    dst (gdal Dataset): destination raster that will provide the resolution, 
+        extent and projection
+    resampleOption (string): One of 'nearest', 'bilinear', 'cubic', 
+        'cubic spline', 'lanczos', 'average', or 'mode'. Method to use to 
+        resample the pixels of the source raster
+    outputURI (string, optional): Full address and name of the output raster. 
+        If outFormat is 'MEM',this argument is ignored and the function simply 
+        produces a raster in memory. 
+        The extension for the output file should match the outFormat.
             
-            Inputs
-            --src (gdal Dataset): source raster to be warped
-            --dst (gdal Dataset): destination raster that will provide the resolution, extent and projection
-            --resampleOption (string): One of 'nearest', 'bilinear', 'cubic', 'cubic spline', 'lanczos', 
-                    'average', or 'mode'. Method to use to resample the pixels of the source raster
-            --outputURI (string, optional): Full address and name of the output raster. If outFormat is 'MEM',
-                    this argument is ignored and the function simply produces a raster in memory. 
-                    The extension for the output file should match the outFormat.
-            
-            --outFormat (string, optional): Format to use for the output raster from the function. 
-                    Use 'GTiff' for a .tif output. Default creates a raster in memory.
-    ---------------------------------------------------------------------------------------------
-    """  
+    outFormat (string, optional): Format to use for the output raster from 
+        the function. 
+        Use 'GTiff' for a .tif output. Default creates a raster in memory.
+    '''
+    
     if not type(src) is gdal.Dataset:
         return False
     
@@ -1693,28 +2013,19 @@ def readRasterBlock(src, colStart, rowStart, colBlockSize, rowBlockSize, band=1)
 
 def new_raster_from_base(base, outputURI, formatR, nodata, datatype, bands=None):
     ''' 
-    Create an empty copy of a raster from an existing one
+    Create an empty copy of a raster from an existing one.
+    The function returns a gdal raster variable filled with the nodata 
+    value.
     
-    base: gdal raster layer
-        Name of the variable with the input raster to copy
-    
-    outputURI: string
-        Address + name of the output raster (extension should agree with format, none for memory)
-        
-    formatR: string
-        Format for the dataset (e.g. "GTiff", "MEM")
-    
-    nodata: int/float
-        No data value (type should agree with raster type)
-    
-    datatype: gdal data type (e.g. gdal.GDT_Int32)
-        Data type for the raster
-    
-    bands: [optional] int
-        Number of bands for the output raster. 
+    base (gdal raster layer): Name of the variable with the input raster 
+        to copy
+    outputURI (str): Address + name of the output raster (extension 
+        should agree with format, none for memory)
+    formatR (str): Format for the dataset (e.g. "GTiff", "MEM")
+    nodata (num): No data value (type should agree with raster type)
+    datatype (gdal data type): (e.g. gdal.GDT_Int32) Data type for the raster
+    bands [optional] (int): Number of bands for the output raster. 
         If not specified, will use the number of bands of the input raster
-    
-    The function returns a gdal raster variable filled with the nodata value
     '''
     
     cols = base.RasterXSize
@@ -1760,6 +2071,11 @@ def world2Pixel(geoMatrix, x, y):
 
 
 def getGDALTypeFromNumber(nb):
+    '''
+    Takes the number representing the gdal data type and returns the actual
+    data type as a string.
+    '''
+    
     if nb == 0:
         out = 'GDT_Unknown'
     elif nb == 1:
