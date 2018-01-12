@@ -2,6 +2,8 @@ from osgeo import ogr, gdal, osr, gdalconst
 from csv import DictWriter
 import os, processing, re, csv, platform, sys
 import numpy as np
+
+sys.path.append('C:/Users/Olivier/OlivierGithub/QGIS-scripts')
 import image_proc_functions as img
 
 def run_script(iface):
@@ -10,19 +12,20 @@ def run_script(iface):
     ##PARAMETERS
     
     #Address of the folder with the classifications
-    classifFolder = 'D:/gedata_current/jde_coffee/data/SDM/classifs'
+    classifFolder = 'E:/gedata_current/jde_coffee/data/SDM/classifs'
     #TAB delimited file with the priority order in which to combine the classifications
     #The file should have two columns, the first is a priority number, the second the file name of the classification
-    orderClassif = 'D:/gedata_current/jde_coffee/data/SDM/classifs/classif_priorities_SDM.txt'
+    orderClassif = 'E:/gedata_current/jde_coffee/data/SDM/classifs/classif_priorities_SDM.txt'
     #Classes to pass to NA values in combining the classifications
     #Leave an empty list if None
     #These names should not include any trailing numbers if several categories have been made (e.g. Cloud1, Cloud2...)
     toNa = ['Cloud','Shadow']
+    #Additional values in the classifications that are not in the legends
     valuesNotInLegend = [0]
     
     
     #Address of the folder with the legends
-    legendFolder = 'D:/gedata_current/jde_coffee/data/SDM/classifs/Legend'
+    legendFolder = 'E:/gedata_current/jde_coffee/data/SDM/classifs/Legend'
     #Legend file names prefix to add to the classification names
     legendPrefix = 'legend_'
     #Legend file extensions: could be '.csv' or '.txt'
@@ -30,46 +33,56 @@ def run_script(iface):
     #Legend file delimiter
     legendDelim = ','
     
+    #Address of the folder with the confusion matrices
+    matrixFolder = 'E:/gedata_current/jde_coffee/data/SDM/classifs/Matconf'
+    #Matrix file names prefix to add to the classification names
+    matrixPrefix = 'Matconf_'
+    #Matrix file extensions: could be '.csv' or '.txt'
+    matrixExt = '.csv'
+    #Legend file delimiter
+    matrixDelim = ','
     
     #Address of the folder for the temporary files
-    tempFolder = 'D:/gedata_current/jde_coffee/data/SDM/temp'
+    tempFolder = 'E:/gedata_current/temp'
     
     
     #Address and name of the grid shapefile
-    gridShape = 'D:/gedata_current/jde_coffee/data/SDM/grids/AOI_grid_SDM_2km.shp'
+    gridShape = 'E:/gedata_current/jde_coffee/data/SDM/grids/AOI_grid_SDM_2km.shp'
     #Field to use for the ID of the cells
     idField = 'serp_id'
     
     
     #Projection epsg for the output. 
-    #Leave None to use the one from the grid. Should be the same as the grid if the grid has not projection!
+    #Leave None to use the one from the grid. Should be the same as the grid if the grid doesn't have a projection info!
     epsgProject = 32723
     
     
     #SRTM Mask option
     srtmMask = False
-    srtmRaster = 'D:/gedata_current/jde_coffee/data/SDM/srtm/srtm_v3_SDMnet.tif'
+    srtmRaster = 'E:/gedata_current/jde_coffee/data/SDM/srtm/srtm_v3_SDMnet.tif'
     breakValues = [550] #list of values used as break to separate the classifications 
+    labelsElev = ['robusta','arabica']
     
     
-    #Share of clouds/missing per cell under which correct by simple proportionate scaling
+    #Share of clouds/missing per cell under which correct by simple proportional scaling
     propCloud <- 0.5
     
     
     #Output name and address for the combined files and legend
     exportClassifName = 'megot_classif.tif'
     
-    combine_classifications(classifFolder, orderClassif, legendFolder, legendPrefix, legendExt, 
-                            legendDelim, tempFolder, 'nocloud_'+exportClassifName, toNa=toNa, valuesNotInLegend=valuesNotInLegend)
-    
-    combine_classifications(classifFolder, orderClassif, legendFolder, legendPrefix, legendExt, 
-                            legendDelim, tempFolder, 'cloud_'+exportClassifName, toNa=[], valuesNotInLegend=valuesNotInLegend)
-    
     
     
     ##########################################################################################################################
     ##########################################################################################################################
     ##CODE
+    
+    #Combine the classifications without and with the clouds
+    combine_classifications(classifFolder, orderClassif, legendFolder, legendPrefix, legendExt, 
+                            legendDelim, tempFolder, 'nocloud_'+exportClassifName, toNa=toNa, valuesNotInLegend=valuesNotInLegend)
+    
+    combine_classifications(classifFolder, orderClassif, legendFolder, legendPrefix, legendExt, 
+                            legendDelim, tempFolder, 'cloud_'+exportClassifName, toNa=[], valuesNotInLegend=valuesNotInLegend)
     
     #Merge the two combined rasters
     #Check the computer platform
@@ -90,14 +103,81 @@ def run_script(iface):
         sys.argv = args
         gm.main()
     
+    #Combine the legends to have a single legend?
+    
     #Remove the intermediary files
     for f in [classifFolder+'/cloud_'+exportClassifName,classifFolder+'/nocloud_'+exportClassifName,legendFolder+'/legend_nocloud_'+exportClassifName]:
         os.remove(f)
     
-    #Mask the combined raster with the srtm data if needed and demultiply the classification
-    if srtmMask:
-        pass
-    
+    #Import the raster with the combined classifications
+    baseClassif = gdal.Open(os.path.join(classifFolder,exportClassifName))
+    #Mask the combined raster with the srtm data if needed and demultiply the classification based on the elevation breaks
+    if not srtmMask:
+        processed = new_raster_from_base(baseClassif, tempFolder+'/'+'masked0.tif', 'GTiff', -32768, gdal.GDT_Int16, bands=1)
+        processed.GetRasterBand(1).WriteArray(baseClassif.GetRasterBand(1).readAsArray())
+        
+        #Number of pieces of the classification raster to tabulate
+        pieces = 1
+        
+        baseClassif = None
+        processed = None
+    else:
+        #Import the elevation raster
+        elev = gdal.Open(srtmRaster)
+        
+        nodata = elev.GetRasterBand(1).GetNoDataValue()
+        
+        #Adapt the resolution of the smooth images to the baseline if needed
+        elev = warp_raster(elev, baseClassif, resampleOption='average', outputURI=None, outFormat='MEM')
+        
+        #Number of pieces of the classification raster to tabulate
+        pieces = len(breakValues) + 1
+        
+        #Complete the breakValues
+        breakValues.insert(0, 0)
+        breakValues.append(10000)
+        
+        #Get the size of the rasters to identify the limits of the blocks to loop through
+        band = baseClassif.GetRasterBand(1)
+        #Get the size of the raster
+        xsize = band.XSize
+        ysize = band.YSize
+        #Set the block size
+        BlockXSize = 256
+        BlockYSize = 256
+        #Get the number of blocks in x and y directions
+        xBlocks = int(round(xsize/BlockXSize)) + 1
+        yBlocks = int(round(ysize/BlockYSize)) + 1
+        
+        processed = []
+        for i in range(pieces):
+            #Prepare empty rasters to hold the masked rasters
+            processed.append(new_raster_from_base(baseClassif, tempFolder+'/'+'masked'+str(i)+'.tif', 'GTiff', -32768, gdal.GDT_Int16, bands=1))
+        
+        for xStep in range(xBlocks):
+            for yStep in range(yBlocks):
+                
+                #Import the block of the classification
+                baseBlock = readRasterBlock(baseClassif, xStep*BlockXSize, yStep*BlockYSize, BlockXSize, BlockYSize)
+                #Import the block of the elevation raster
+                elevBlock = readRasterBlock(elev, xStep*BlockXSize, yStep*BlockYSize, BlockXSize, BlockYSize)
+                
+                for i in range(pieces):
+                    #Mask the values based on the elevation raster
+                    if not nodata:
+                        outArray[np.logical_or(np.isnan(elevBlock),np.logical_or(elevBlock<breakValues[i],elevBlock>=breakValues[i+1]))] = -32768
+                    else:
+                        outArray[np.logical_or(np.logical_or(np.isnan(elevBlock),elevBlock==nodata),np.logical_or(elevBlock<breakValues[i],elevBlock>=breakValues[i+1]))] = -32768                    
+                    
+                    #Write to output raster
+                    processed[i].GetRasterBand(1).WriteArray(outArray, xStep*BlockXSize, yStep*BlockYSize)
+        
+        #Close the rasters
+        for p in processed:
+            processed[p] = None
+        baseClassif = None
+        elev = None
+    '''
     #Import the grid
     driver = ogr.GetDriverByName('ESRI Shapefile')
     dataSource = driver.Open(gridShape, 1) # 0 means read-only. 1 means writeable.
@@ -107,12 +187,44 @@ def run_script(iface):
         return False
     # Create layer
     gridLayer = dataSource.GetLayer(0)
+    '''
+    
+    tabulated = []
+    for i in len(pieces):
+        #Tabulate area by grid cell for each of the combined classifications
+        stat = img.tabulate_area(regionsFileName=gridShape, rasterFileName=os.path.join(tempFolder,'masked'+str(i)+'.tif'), 
+                             bands=1, polIdFieldName=idField, numPix=False, outTxt=None, prefix='cat', numOutDecs=0, alltouch=False)
+        #Add the tabulated values to the result list
+        #The result is a dictionary of dictionaries. First dictionary are the polygon ids, the second [value in raster: count]
+        tabulated.append(stat[0])
+        
+    #Get all the polygon ids for each elevation zone
+    polygons = []
+    #Get all the categories
+    categories = set()
+    for piece in tabulated:
+        polygons.append(sorted(piece.keys()))
+        for k in piece.keys():
+            categories.update(k.keys())
+    categories = list(categories)
+    categories.sort()
+    
+    #Create empty arrays and fill them with the values
+    tabArray = []
+    for l in range(len(polygons)):
+        tabArray.append(np.zeros((len(polygons),len(categories))))
+        
+        #For each polygon cell and category, get the associated count
+        for p in range(len(polygons[l])):
+            for c in range(len(categories)):
+                try:
+                    tabArray[l][p,c] = tabulated[l][polygons[l][p]][categories[c]]
+                except:
+                    continue
+    
+    #Import the confusion matrices
     
     
-    #Tabulate area by grid cell for each of the combined classifications
-    img.tabulateArea()
-    
-  
 ##########################################################################################################################
 ##########################################################################################################################
 ##FUNCTION    
@@ -340,3 +452,85 @@ def checkPlatform():
         return
     
     return(currentPlatform)
+
+def readRasterBlock(src, xStart, yStart, xBlockSize, yBlockSize, band=1):
+    '''
+    Function to read a block of data from a gdal Dataset. It will return the block as a numpy array
+    
+    src (gdal Dataset): raster to extract the block from
+    xStart (int): X pixel value from which to start extraction (upper left corner)
+    yStart (int): Y pixel value from which to start extraction (upper left corner)
+    xBlockSize (int): X size of the block to extract. If the block is larger than the number 
+            of pixels from xStart, will extract up to the raster limit
+    yBlockSize (int): Y size of the block to extract. If the block is larger than the number 
+            of pixels from xStart, will extract up to the raster limit
+    band (int): band from which to extract the block. 1 by default.
+    '''
+    
+    #Get the wanted band
+    band = src.GetRasterBand(band)
+    
+    #Get the size of the raster
+    xsize = band.XSize
+    ysize = band.YSize
+    
+    if yStart + yBlockSize < ysize:
+        rows = yBlockSize
+    else:
+        rows = ysize - yStart
+    
+    if xStart + xBlockSize < xsize:
+        cols = xBlockSize
+    else:
+        cols = xsize - xStart
+            
+    outArray = band.ReadAsArray(xStart, yStart, cols, rows)
+    
+    return outArray
+
+def warp_raster(src, dst, resampleOption='nearest', outputURI=None, outFormat='MEM'):
+    """
+    ---------------------------------------------------------------------------------------------
+    Function : Warp a source raster to the resolution, extent and projection of a destination raster.
+           
+            The function returns the resulting raster. If outFormat is different from 'MEM', the 
+            raster is also saved to disk using the information provided in outputURI.
+            
+            Inputs
+            --src (gdal Dataset): source raster to be warped
+            --dst (gdal Dataset): destination raster that will provide the resolution, extent and projection
+            --resampleOption (string): One of 'nearest', 'bilinear', 'cubic', 'cubic spline', 'lanczos', 
+                    'average', or 'mode'. Method to use to resample the pixels of the source raster
+            --outputURI (string, optional): Full address and name of the output raster. If outFormat is 'MEM',
+                    this argument is ignored and the function simply produces a raster in memory. 
+                    The extension for the output file should match the outFormat.
+            
+            --outFormat (string, optional): Format to use for the output raster from the function. 
+                    Use 'GTiff' for a .tif output. Default creates a raster in memory.
+    ---------------------------------------------------------------------------------------------
+    """  
+    if not type(src) is gdal.Dataset:
+        return False
+    
+    if not type(dst) is gdal.Dataset:
+        return False
+    
+    #Define resampling options
+    resampleOptions = {'nearest': gdalconst.GRA_NearestNeighbour, 'bilinear':gdalconst.GRA_Bilinear, 
+                   'cubic':gdalconst.GRA_Cubic, 'cubic spline':gdalconst.GRA_CubicSpline, 
+                   'lanczos':gdalconst.GRA_Lanczos, 'average':gdalconst.GRA_Average, 
+                   'mode':gdalconst.GRA_Mode} 
+    
+    if not resampleOption in resampleOptions.keys():
+        return False
+    
+    #Raster to host the warped output
+    if outFormat == 'MEM':
+        rOut = new_raster_from_base(dst, 'temp', 'MEM', 0, src.GetRasterBand(1).DataType, bands=src.RasterCount)
+    else:
+        rOut = new_raster_from_base(dst, outputURI, outFormat, 0, src.GetRasterBand(1).DataType, bands=src.RasterCount)
+    
+    #Warp: the parameters are source raster, destination raster, source projection, destination projection, resampling option 
+    gdal.ReprojectImage(src, rOut, src.GetProjection(), rOut.GetProjection(), resampleOptions[resampleOption])
+    
+    return rOut

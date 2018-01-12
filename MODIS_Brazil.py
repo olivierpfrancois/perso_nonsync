@@ -8,6 +8,10 @@
     and mosaic the images and mask them for each region
     to process.
  """
+import sys
+# Block python from writing pyc files
+sys.dont_write_bytecode = True
+print sys.path
 
 import os, re
 import MODIS_gedata_toolbox as md
@@ -18,15 +22,16 @@ def main():
     #####################################################################################################################
     # #PARAMETERS
     
+    prefixRootSys = 'E:/gedata_current' # '/home/olivierp' # '/media/olivier/olivier_ext1/gedata_current'
+    
     # #DIRECTORIES parameters
     # Working directory
-    dst = '/home/olivierp/jde_coffee/MODIS/collection6/Brazil'
-    # /media/olivier/olivier_ext1/gedata_current/jde_coffee/MODIS/collection6' #'E:/gedata_current/jde_coffee/MODIS/collection6'
+    dst = prefixRootSys + '/jde_coffee/MODIS/collection6/Brazil'
     # Directory data sources
-    origin = '/home/olivierp/jde_coffee/data/Brazil'
-    # '/media/olivier/olivier_ext1/gedata_current/jde_coffee/data' #'E:/gedata_current/jde_coffee/data'
+    origin = prefixRootSys + '/jde_coffee/data/Brazil'
     # Folder inside dst to use for temporary files (should be empty)
-    tempDir = '/home/olivierp/jde_coffee/Temp'
+    tempDir = prefixRootSys + '/jde_coffee/Temp'
+    # 'E:/gedata_current/jde_coffee/Temp'
     # Destination folder for the download
     rawdataDir = 'raw_data'
     
@@ -48,7 +53,7 @@ def main():
     statesRefFolder = 'baseline'
     
     # #DOWNLOAD parameters
-    dload = False
+    dload = True
     # Product to download
     product = 'MOD13Q1.006'
     # Username for the earthdata website
@@ -78,7 +83,7 @@ def main():
     # endMosaic = '2005-02-01'
     
     # masking missing values
-    checkQuality = True
+    checkQuality = False
     inFolder = statesRawFolder
     outFolder = 'masked_missing'
     
