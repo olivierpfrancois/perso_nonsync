@@ -1818,15 +1818,18 @@ def screenQualityVI(pixel, index, nodataP, nodataI, nodataMask):
     '''
     
     # If no quality information return the no data value of the input
-    if index == nodataI:
+    if index == nodataI or pixel == nodataP:
         return nodataP
     
     bit16 = np.binary_repr(index, width=16)
     
-    if not pixel == nodataI and (bit16[2:5] == '001' and bit16[14:16] in ['00', '01', '10'] and 
+    if (bit16[2:5] in ['001','010','100','101'] and bit16[14:16] in ['00', '01', '10'] and 
         bit16[9:13] in ['0000', '0001', '0010', '0011', '0100', '0101', '0111',
                         '1000']):
-         p = pixel
+        p = pixel
+    
+    elif bit16[2:5] in ['000','011','110','111']:
+        p = nodataP
     else:
         p = nodataMask
     

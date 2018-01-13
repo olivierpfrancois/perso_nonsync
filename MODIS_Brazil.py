@@ -11,18 +11,19 @@
 import sys
 # Block python from writing pyc files
 sys.dont_write_bytecode = True
-print sys.path
 
 import os, re
 import MODIS_gedata_toolbox as md
-
+import gapfill
+from datetime import datetime
+import numpy as np
 
 def main():
     #####################################################################################################################
     #####################################################################################################################
     # #PARAMETERS
     
-    prefixRootSys = 'E:/gedata_current' # '/home/olivierp' # '/media/olivier/olivier_ext1/gedata_current'
+    prefixRootSys = '/media/olivier/olivier_ext1/gedata_current' # 'E:/gedata_current' # '/home/olivierp' 
     
     # #DIRECTORIES parameters
     # Working directory
@@ -53,7 +54,7 @@ def main():
     statesRefFolder = 'baseline'
     
     # #DOWNLOAD parameters
-    dload = True
+    dload = False
     # Product to download
     product = 'MOD13Q1.006'
     # Username for the earthdata website
@@ -75,7 +76,7 @@ def main():
     mosaic = False
     # Starting date for the files to mosaic
     #    If None, will default to the files that have been just downloaded if any.
-    startMosaic = '2005-01-01'
+    startMosaic = '2017-10-01'
     # startMosaic = '2005-01-01'
     # Ending date for the files to mosaic
     #    If None, defaults to today
@@ -84,8 +85,17 @@ def main():
     
     # masking missing values
     checkQuality = False
-    inFolder = statesRawFolder
-    outFolder = 'masked_missing'
+    inCheck = statesRawFolder
+    outCheck = 'masked_missing'
+    startCheck = '2017-06-01'
+    endCheck = None
+    
+    # filling missing values
+    fillMissing = True
+    inMissing = 'masked_missing'
+    outMissing = 'filled_missing'
+    yearsMissing = [2017]
+    daysMissing = [289,305,321,337,353]
     
     # #SMOOTHING parameters
     smooth = False
@@ -214,28 +224,95 @@ def main():
                                   tiles=tiles,
                                   subset='1 0 1 0 0 0 0 0 0 0 0 0',
                                   suffix=['NDVI', 'Quality'],
+                                  nodataOut=[32767, 65535],
                                   startMosaic=startMosaic,
                                   endMosaic=endMosaic)
     
     if checkQuality:
+        if not endCheck:
+            endCheck= datetime.now()
+            endCheck = endCheck.date()
+        else:
+            endCheck= datetime.strptime(endCheck, '%Y-%m-%d').date()
+        
+        if startCheck:
+            startCheck = datetime.strptime(startCheck, '%Y-%m-%d').date()
+        
         for s in states:
-            # Get all the images on disk
-            allNDVI = [os.path.join(dst, s, inFolder, f) for 
-                       f in os.listdir(os.path.join(dst, s, inFolder)) 
-                       if f.endswith('NDVI.tif')]
+            # Import all the raw ndvi modis images on disk
+            allNDVI = [os.path.join(dst, s, inCheck, f) for 
+                        f in os.listdir(os.path.join(dst, s, inCheck)) 
+                        if f.endswith('NDVI.tif')]
+        
+            # Dates of these files
+            datesNDVI = [re.search('_([0-9]{4}-[0-9]{2}-[0-9]{2})', f).group(1) 
+                        for f in allNDVI]
+            # Transform into date format
+            datesNDVI = [datetime.strptime(d, '%Y-%m-%d').date() for d in datesNDVI]
+            
+            if not startCheck:
+                startCheck = min(datesNDVI)
+            
+            # Keep only the files and dates within the dates to process
+            allNDVI = [f for f, d in zip(allNDVI, datesNDVI) 
+                       if d >= startCheck and d <= endCheck]
             allNDVI.sort()
-            allQuality = [os.path.join(dst, s, inFolder, f) for 
-                          f in os.listdir(os.path.join(dst, s, inFolder)) 
+            
+            # Update the dates in the final selection
+            datesNDVI = [d for d in datesNDVI if d >= startCheck and d <= endCheck]
+            datesNDVI.sort()
+            
+            # Import all the quality modis images on disk
+            allQuality = [os.path.join(dst, s, inCheck, f) for 
+                          f in os.listdir(os.path.join(dst, s, inCheck)) 
                           if f.endswith('Quality.tif')]
+            
+            # Dates of these files
+            datesQual = [re.search('_([0-9]{4}-[0-9]{2}-[0-9]{2})', f).group(1) 
+                        for f in allQuality]
+            # Transform into date format
+            datesQual = [datetime.strptime(d, '%Y-%m-%d').date() for d in datesQual]
+            
+            # Keep the same files as the NDVI
+            datesQual = [f for f, d in zip(allQuality, datesQual) if
+                         d in datesNDVI]
             allQuality.sort()
             
-            allOut = [re.sub(inFolder, outFolder, f) for f in allNDVI]
+            # Prepare the output names
+            allOut = [re.sub(inCheck, outCheck, f) for f in allNDVI]
             
             # Define the dataset
             dataset = zip(allNDVI, allQuality, allOut)
             
             for d in dataset:
-                md.maskQualityVI(d[0], d[1], d[2])
+                md.maskQualityVI(ndviRaster=d[0], qualityRaster=d[1], outRaster=d[2], nodataOut=-3000)
+    
+    if fillMissing:
+        
+        for s in states:
+            inputRasters = [os.path.join(dst, s, inMissing, f) for 
+                            f in os.listdir(os.path.join(dst, s, inMissing)) 
+                            if f.endswith('.tif')]
+            
+            inputRasters.sort()
+            
+            #Get the dates
+            datesAll = [re.search('_([0-9]{4}-[0-9]{2}-[0-9]{2})', f).group(1) for f in inputRasters]
+            # Transform into date format
+            datesAll = [datetime.strptime(d, '%Y-%m-%d').date() for d in datesAll]
+            
+            # Transform into days from start of the year
+            days = [int(d.strftime('%j')) for d in datesAll]
+            
+            # Get the years for the files on disk
+            years = [int(d.strftime('%Y')) for d in datesAll] 
+            
+            gapfill.gapFill(rasters=inputRasters, seasons=days, years=years,
+                            outFolder=os.path.join(dst, s, outMissing),
+                            suffix='f', nodata=[-3000], iMax=np.inf,
+                            subsetSeasons=daysMissing, subsetYears=yearsMissing, subsetMissing=None,
+                            clipRange=(-2000, 10000))
+    
     
     if smooth:
         print('Starting the smoothing process')
