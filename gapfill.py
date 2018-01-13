@@ -10,7 +10,9 @@ import pandas as pd
 import statsmodels.formula.api as smf
 from xml.dom import NoDataAllowedErr
 import MODIS_gedata_toolbox as md
-import os, re
+import os, re, multiprocessing
+import pathos.multiprocessing as mp
+from multiprocessing.dummy import Pool as ThreadPool
 
 
 def array2TwoDim(a):
@@ -152,7 +154,7 @@ def estimateQuantile(a, mp, nQuant):
 def gapFill(rasters, seasons, years, outFolder, suffix, nodata=None,
             iMax=np.inf,
             subsetSeasons=None, subsetYears=None, subsetMissing=None,
-            clipRange=(-np.inf, np.inf)):
+            clipRange=(-np.inf, np.inf), parallel=False, nCores=None):
     '''
     Function to fill missing values in a series of rasters
     
@@ -228,7 +230,13 @@ def gapFill(rasters, seasons, years, outFolder, suffix, nodata=None,
     if type(nodata) is int or nodata == np.nan:
         nodata = [nodata]
     
-    p = 0
+    if parallel:
+        if not nCores:
+            nCores = multiprocessing.cpu_count()
+        
+        # p = ThreadPool(nCores)
+        p = mp.Pool(nCores)
+    
     # Loop through all the rasters in the subset to fill the missing values
     for y in subsetYears:
         for s in subsetSeasons:
@@ -249,20 +257,38 @@ def gapFill(rasters, seasons, years, outFolder, suffix, nodata=None,
                 miss = np.where(r == n)
                 mps += map(list, zip(miss[0], miss[1]))
             
+            # Subset the rasters around the pixels
+            if not nodataOut in nodata:
+                replaceVal = nodata + [nodataOut]
+            else:
+                replaceVal = nodata
+            
             # Loop through the missing data to replace in r
-            for pixel in mps:
+            if not parallel:
+                mpsFill = [gapFillOnePixel(pixel=pixel, season=s, year=y,
+                                    files=dst, seasons=seasons,
+                                    years=years, replaceVal=replaceVal,
+                                    nodataIn=nodata[0], nodataOut=nodataOut,
+                                    clipRange=clipRange, iMax=iMax) 
+                                           for pixel in mps]
+            
+            else:
+                mpsFill = p.map(
+                    lambda x: gapFillOnePixel(pixel=x, season=s,
+                                              year=y, files=dst,
+                                              seasons=seasons, years=years,
+                                              replaceVal=replaceVal,
+                                              nodataIn=nodata[0],
+                                              nodataOut=nodataOut,
+                                              clipRange=clipRange, iMax=iMax),
+                    mps)
                 
+                '''
                 # Create full position of pixel to replace
                 mp = pixel + [s, y]
                 
                 i = 0 
                 
-                # Subset the rasters around the pixels
-                if not nodataOut in nodata:
-                    replaceVal = nodata + [nodataOut]
-                else:
-                    replaceVal = nodata
-                    
                 a = gapSubset(rasters=dst, seasons=seasons, years=years,
                              mp=mp, i=i, initialSize=[10, 10, 1, 5],
                              nodata=replaceVal)
@@ -288,9 +314,10 @@ def gapFill(rasters, seasons, years, outFolder, suffix, nodata=None,
                 # Clip the value if needed
                 if not z == nodataOut:
                     z = max(min(z, clipRange[1]), clipRange[0])
-                
+                '''
                 # Replace the fitted value in the raster
-                r[pixel[0], pixel[1]] = z
+                for pixel, z in zip(mps, mpsFill):
+                    r[pixel[0], pixel[1]] = z
             
             # Prepare name for output
             outName = os.path.join(outFolder,
@@ -307,8 +334,50 @@ def gapFill(rasters, seasons, years, outFolder, suffix, nodata=None,
             
             outR.FlushCache()
             outR = None
+    
+    if parallel:
+        # Close the threads
+        p.close()
+        p.join()
 
 
+def gapFillOnePixel(pixel, season, year, files, seasons, years, replaceVal,
+                    nodataIn, nodataOut, clipRange, iMax):
+    
+    # Create full position of pixel to replace
+    mp = pixel + [season, year]
+    
+    i = 0 
+    
+    a = gapSubset(rasters=files, seasons=seasons, years=years,
+                 mp=mp, i=i, initialSize=[10, 10, 1, 5],
+                 nodata=replaceVal)
+    
+    # Predict the value
+    z = gapPredict(a=a[0], i=i, mp=a[1], nodataIn=nodataIn,
+                   nodataOut=nodataOut)
+    
+    while z == nodataOut and i < iMax:
+        i += 1
+        
+        aNew = gapSubset(rasters=files, seasons=seasons, years=years,
+                        mp=mp, i=i, initialSize=[10, 10, 1, 5],
+                        nodata=replaceVal)
+        if aNew[0].shape == a[0].shape:
+            break
+        
+        a = None
+        a = aNew
+        z = gapPredict(a=a[0], i=i, mp=a[1], nodataIn=nodataIn,
+                   nodataOut=nodataOut)
+    
+    # Clip the value if needed
+    if not z == nodataOut:
+        z = max(min(z, clipRange[1]), clipRange[0])
+    
+    return z
+
+        
 def gapPredict(a, i, mp, nodataIn, nodataOut=None, nTargetImage=5, nImages=4,
                nQuant=2):
     '''
@@ -337,6 +406,7 @@ def gapPredict(a, i, mp, nodataIn, nodataOut=None, nTargetImage=5, nImages=4,
     
     a = a.astype(float)
     a[a == nodataIn] = np.nan
+    a[np.isinf(a)] = np.nan
     
     am = array2TwoDim(a)
     
@@ -346,8 +416,8 @@ def gapPredict(a, i, mp, nodataIn, nodataOut=None, nTargetImage=5, nImages=4,
         return(nodataOut)
     
     tau = estimateQuantile(a=a, mp=mp, nQuant=nQuant)
-    if not tau or tau == np.nan: 
-      return(nodataOut)
+    if not tau or tau == np.nan:
+        return(nodataOut)
     
     s = gapScore(mat=am)
     
@@ -355,18 +425,19 @@ def gapPredict(a, i, mp, nodataIn, nodataOut=None, nTargetImage=5, nImages=4,
     r = np.copy(s)
     
     r[~np.isnan(s)] = ss.rankdata(s[~np.isnan(s)])
+    r[np.isneginf(r)] = np.nanmin(r[~np.isinf(r)]) - 1
+    r[np.isposinf(r)] = np.nanmin(r[~np.isinf(r)]) + 1
     
-    # Create a pandas dataframe to ru the quantile regression
+    # Create a pandas dataframe to run the quantile regression
     df = pd.DataFrame(data=np.column_stack([am.flatten('F'), np.repeat(r, repeats=am.shape[0])]),
                       columns=["z", "rank"])
     
     # Run quantile regression
     try:
-        mod = smf.quantreg('z ~ rank', df) 
+        mod = smf.quantreg('z ~ rank', df)
+        m = mod.fit(q=tau, max_iter=800, p_tol=1e-02)  
     except:
         return(nodataOut)
-    
-    m = mod.fit(q=tau, max_iter=800, p_tol=1e-02) 
     
     # Estimate fitted value
     p = m.params['Intercept'] + m.params['rank'] * r[mp[2]]
@@ -433,8 +504,8 @@ if __name__ == '__main__':
     gapFill(rasters=inputRasters, seasons=days, years=years,
             outFolder='/home/olivierp/jde_coffee/MODIS/collection6/Vietnam/LD/filled_missing',
             suffix='f', nodata=[-3000], iMax=np.inf,
-            subsetSeasons=None, subsetYears=[2008, 2009, 2010], subsetMissing=None,
-            clipRange=(-2000, 10000))
+            subsetSeasons=None, subsetYears=[2014, 2015, 2016, 2017], subsetMissing=None,
+            clipRange=(-2000, 10000), parallel=False, nCores=15)
     
     '''
     seasons = days

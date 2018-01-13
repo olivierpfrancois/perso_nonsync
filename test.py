@@ -5,9 +5,35 @@ import sys
 sys.dont_write_bytecode = True
 
 import random
-import multiprocessing
+from multiprocessing.dummy import Pool as ThreadPool
+import time
 
 
+def f(x):
+    return [x * x, x * 2]
+
+
+if __name__ == '__main__':
+    
+    for i in range(1, 10):
+        print i
+        t0 = time.time()
+        
+        p = ThreadPool(i)
+        test = p.map(f, range(1, 10000000))
+        
+        t1 = time.time()
+    
+        total = t1 - t0
+        print(total)
+        
+        print type(test)
+        print test[0]
+        
+        p.close()
+        p.join()
+    
+'''
 def list_append(count, id, out_list):
     """
     Creates an empty list and then appends a 
@@ -41,3 +67,4 @@ if __name__ == "__main__":
         j.join()
 
     print "List processing complete."
+'''
