@@ -16,7 +16,6 @@ import os, re
 import MODIS_gedata_toolbox as md
 import gapfill
 from datetime import datetime
-import numpy as np
 
 def main():
     #####################################################################################################################
@@ -39,7 +38,7 @@ def main():
     # #REGIONS parameters
     # Regions to process inputs    !!!!SHOULD BE IN EPSG 4326 PROJECTION
     # Names of the regions (also folders names) 
-    states = ["CER", "CHA", "CO", "ES", "MO", "SDM", "SP", "ZM"]  # ["LD"]
+    states = ["CER", "CHA", "CO", "ES", "MO", "SDM", "SP", "ZM"]
     # Varieties in each case
     varieties = [['arabica'], ['arabica'], ['arabica'], ['arabica', 'robusta'], ['arabica'], ['arabica'], ['arabica'], ['arabica', 'robusta']]
             # [['coffee']] 
@@ -87,7 +86,7 @@ def main():
     checkQuality = False
     inCheck = statesRawFolder
     outCheck = 'masked_missing'
-    startCheck = '2017-06-01'
+    startCheck = '2011-01-01'
     endCheck = None
     
     # filling missing values
@@ -274,7 +273,7 @@ def main():
             datesQual = [datetime.strptime(d, '%Y-%m-%d').date() for d in datesQual]
             
             # Keep the same files as the NDVI
-            datesQual = [f for f, d in zip(allQuality, datesQual) if
+            allQuality = [f for f, d in zip(allQuality, datesQual) if
                          d in datesNDVI]
             allQuality.sort()
             
@@ -309,9 +308,9 @@ def main():
             
             gapfill.gapFill(rasters=inputRasters, seasons=days, years=years,
                             outFolder=os.path.join(dst, s, outMissing),
-                            suffix='f', nodata=[-3000], iMax=np.inf,
+                            suffix='f', nodata=[-3000], iMax=20,
                             subsetSeasons=daysMissing, subsetYears=yearsMissing, subsetMissing=None,
-                            clipRange=(-2000, 10000))
+                            clipRange=(-2000, 10000), parallel=True, nCores=3)
     
     
     if smooth:

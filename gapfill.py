@@ -294,60 +294,8 @@ def gapFill(rasters, seasons, years, outFolder, suffix, nodata=None,
                                        nodataOut=nodataOut,
                                        clipRange=clipRange, iMax=iMax)
                 
-                """
-                
-                # Create full position of pixel to replace
-                mpx = mps[0] + [s, y]
-                
-                i = 0
-                
-                a = gapSubset(rasters=dst, seasons=seasons, years=years,
-                             mp=mpx, i=i, initialSize=[10, 10, 1, 5],
-                             nodata=replaceVal)
-                
-                # Predict the value
-                z = gapPredict(a=a[0], i=i, mp=a[1], nodataIn=nodata[0],
-                               nodataOut=nodataOut)
-                
-                print(dst)
-                print(dill.pickles(dst))
-                dill.detect.trace(True)
-                # pickle.dumps(pp)
-                """
                 mpsFill = p.map(pp, mps)
                 
-                '''
-                # Create full position of pixel to replace
-                mp = pixel + [s, y]
-                
-                i = 0 
-                
-                a = gapSubset(rasters=dst, seasons=seasons, years=years,
-                             mp=mp, i=i, initialSize=[10, 10, 1, 5],
-                             nodata=replaceVal)
-                
-                # Predict the value
-                z = gapPredict(a=a[0], i=i, mp=a[1], nodataIn=nodata[0],
-                               nodataOut=nodataOut)
-                
-                while z == nodataOut and i < iMax:
-                    i += 1
-                    
-                    aNew = gapSubset(rasters=dst, seasons=seasons, years=years,
-                                    mp=mp, i=i, initialSize=[10, 10, 1, 5],
-                                    nodata=replaceVal)
-                    if aNew[0].shape == a[0].shape:
-                        break
-                    
-                    a = None
-                    a = aNew
-                    z = gapPredict(a=a[0], i=i, mp=a[1], nodataIn=nodata[0],
-                               nodataOut=nodataOut)
-                
-                # Clip the value if needed
-                if not z == nodataOut:
-                    z = max(min(z, clipRange[1]), clipRange[0])
-                '''
                 # Replace the fitted value in the raster
                 for z in mpsFill:
                     r[z[0], z[1]] = z[4]
