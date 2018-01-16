@@ -38,7 +38,7 @@ def main():
     
     # #DIRECTORIES parameters
     # Working directory
-    dst = os.path.join(prefixRootSys 'MODIS/collection6/Brazil')
+    dst = os.path.join(prefixRootSys, 'MODIS/collection6/Brazil')
     # Directory data sources
     dataDir = os.path.join(prefixRootSys, 'data/Brazil')
     # Folder inside dst to use for temporary files (should be empty)
@@ -73,13 +73,13 @@ def main():
     # Process decision dummies
     
     # Download images
-    dload = False
+    dload = True
     # Mosaic images for each region and crop to extent 
-    mosaic = False
+    mosaic = True
     # Check quality 
-    checkQuality = False
+    checkQuality = True
     # Fill missing values and mask by exact AOI 
-    fillMissing = True
+    fillMissing = False
     # Mask images to specific extent of AOI
     maskClips = False
     # Smooth images
@@ -113,7 +113,7 @@ def main():
     # Starting date for the files to mosaic
     #    If None, will default to the files that have been just downloaded if 
     #    any.
-    startMosaic = '2017-10-01'
+    startMosaic = '2005-01-01'
     # startMosaic = '2005-01-01'
     # Ending date for the files to mosaic
     #    If None, defaults to today
@@ -131,9 +131,9 @@ def main():
     
     ############ FILL MISSING
     # Input folder for the images to fill
-    inMissing = statesMaskedMissing
+    inMissing = statesMaskedFolder
     # Output folder for the images to fill
-    outMissing = statesFilledMissing
+    outMissing = statesFilledFolder
     # Year(s) of images to fill
     yearsMissing = [2017]
     # Day(s) of images to fill
@@ -332,7 +332,7 @@ def main():
                                     raster=d[2],
                                     outRaster=d[2], 
                                     clipR=False, 
-                                    MaskR=True, 
+                                    maskR=True, 
                                     dataToMask=-3000, 
                                     nodataOut=32767)
     
@@ -371,7 +371,7 @@ def main():
                                     raster=nameR,
                                     outRaster=nameR, 
                                     clipR=False, 
-                                    MaskR=True, 
+                                    maskR=True, 
                                     dataToMask=None, 
                                     nodataOut=32767)
         

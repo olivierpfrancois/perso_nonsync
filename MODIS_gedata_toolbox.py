@@ -220,7 +220,7 @@ def mosaicMODISWrapper(root, srcFolder, tmpFolder, regions, regionsOut,
                                     regionsOut + '/' + outName + '_' + 
                                     suffix[l] + '.tif',
                                     clipR=True,
-                                    MaskR=False,
+                                    maskR=False,
                                     nodataOut=nodataOut[l])
                 
             # Remove intermediary file
@@ -284,7 +284,7 @@ def mosaicMODIS(images, subset, suffixes, tempFolder, outFile):
         os.remove(inRaster)
 
 
-def clipMaskRasterByShp(shp, raster, outRaster, clipR=True, MaskR=True,
+def clipMaskRasterByShp(shp, raster, outRaster, clipR=True, maskR=True,
                         dataToMask=None, nodataOut=None, alltouch=False):
     '''
     Function clips a raster by the extent of a shapefile and masks 
@@ -294,7 +294,7 @@ def clipMaskRasterByShp(shp, raster, outRaster, clipR=True, MaskR=True,
     raster (str): Full address of the raster to be clipped.
     outRaster (str): Full adress of the output raster
     clipR (bool): Whether the image should be clipped by the shapefile
-    MaskR (bool): Whether the image should be masked by the shapefile
+    maskR (bool): Whether the image should be masked by the shapefile
     dataToMask (list): Optional list of values of the data to mask. 
         If None, all the values will be masked
     nodataOut (num): Optional no data value for the output raster. If None, 
@@ -303,7 +303,7 @@ def clipMaskRasterByShp(shp, raster, outRaster, clipR=True, MaskR=True,
         should be counted as covered by the polygons.
     '''
     
-    if not clipR and not MaskR:
+    if not clipR and not maskR:
         return False
     
     # Open the data source and read in the extent
@@ -1627,7 +1627,7 @@ def avgRegionRaster(images, datesImg, weightsRaster=None, weightField=None,
         rasters (code proceeds by block for memory management).
     '''
     
-    if weightRaster:
+    if weightsRaster:
         # Get a base image as a reference for format
         baseImg = gdal.Open(images[0])
         
