@@ -2,6 +2,7 @@
 # to the run_script function. See the Help for
 # complete information on how to create a script
 # and use Script Runner.
+from mpl_toolkits.axisartist.clip_path import clip
 
 """ 
     Functions to handle the treatment of MODIS images, 
@@ -218,6 +219,8 @@ def mosaicMODISWrapper(root, srcFolder, tmpFolder, regions, regionsOut,
                                     outRaster=root + '/' + s + '/' + 
                                     regionsOut + '/' + outName + '_' + 
                                     suffix[l] + '.tif',
+                                    clipR=True,
+                                    MaskR=False,
                                     nodataOut=nodataOut[l])
                 
             # Remove intermediary file
@@ -281,19 +284,27 @@ def mosaicMODIS(images, subset, suffixes, tempFolder, outFile):
         os.remove(inRaster)
 
 
-def clipMaskRasterByShp(shp, raster, outRaster, nodataOut=None, alltouch=False):
+def clipMaskRasterByShp(shp, raster, outRaster, clipR=True, MaskR=True,
+                        dataToMask=None, nodataOut=None, alltouch=False):
     '''
     Function clips a raster by the extent of a shapefile and masks 
-        the areas outside of the polygons
+        the areas outside of the polygons as an option
     
     shp (str): Full address of the shapefile to clip
     raster (str): Full address of the raster to be clipped.
     outRaster (str): Full adress of the output raster
+    clipR (bool): Whether the image should be clipped by the shapefile
+    MaskR (bool): Whether the image should be masked by the shapefile
+    dataToMask (list): Optional list of values of the data to mask. 
+        If None, all the values will be masked
     nodataOut (num): Optional no data value for the output raster. If None, 
         will use the no data value from the input raster.
     alltouch (bool): True/False if all the pixels touched by the polygons 
         should be counted as covered by the polygons.
     '''
+    
+    if not clipR and not MaskR:
+        return False
     
     # Open the data source and read in the extent
     driver = ogr.GetDriverByName('ESRI Shapefile')
@@ -349,9 +360,12 @@ def clipMaskRasterByShp(shp, raster, outRaster, nodataOut=None, alltouch=False):
         print('No NODATA information in raster and none provided')
         return False
     
-    # Extract the image information in that extent
-    # using readAsArray xoffset, yoffset, xextent, yextent
-    clip = band.ReadAsArray(ulX, ulY, int(lrX - ulX), int(lrY - ulY)).astype(np.float)
+    # Extract the image information in that extent if clipping or get all
+    if clipR:
+        # using readAsArray xoffset, yoffset, xextent, yextent
+        clip = band.ReadAsArray(ulX, ulY, int(lrX - ulX), int(lrY - ulY)).astype(np.float)
+    else:
+        clip = band.ReadAsArray().astype(np.float)
 
     # Remove rasters to save
     if os.path.isfile(outRaster):
@@ -367,21 +381,28 @@ def clipMaskRasterByShp(shp, raster, outRaster, nodataOut=None, alltouch=False):
 
     new_raster.GetRasterBand(1).SetNoDataValue(nodataImg)
     new_raster.GetRasterBand(1).Fill(nodataImg)
-
-    # Rasterize the region into that raster
-    if alltouch:
-        gdal.RasterizeLayer(new_raster, [1], maskLayer, burn_values=[1.],
-                            options=['ALL_TOUCHED=TRUE'])
-    else:
-        gdal.RasterizeLayer(new_raster, [1], maskLayer, burn_values=[1.],
-                            options=['ALL_TOUCHED=FALSE'])
     
-    # Get the resulting raster band as an array
-    new = new_raster.GetRasterBand(1).ReadAsArray().astype(np.float)
-    new[new == 1.] = clip[new == 1.]
+    if maskR:
+        # Rasterize the region into that raster
+        if alltouch:
+            gdal.RasterizeLayer(new_raster, [1], maskLayer, burn_values=[1.],
+                                options=['ALL_TOUCHED=TRUE'])
+        else:
+            gdal.RasterizeLayer(new_raster, [1], maskLayer, burn_values=[1.],
+                                options=['ALL_TOUCHED=FALSE'])
+        
+        # Get the resulting raster band as an array
+        new = new_raster.GetRasterBand(1).ReadAsArray().astype(np.float)
+        
+        # Mask the values outside the shapefile
+        if dataToMask:
+            for d in dataToMask:
+                clip[(new == nodataImg) & (clip == d)] = nodataImg
+        else:
+            clip[new == nodataImg] = nodataImg
     
     # Export the values
-    new_raster.GetRasterBand(1).WriteArray(new, 0, 0)
+    new_raster.GetRasterBand(1).WriteArray(clip, 0, 0)
     
     # Close the raster
     new_raster.FlushCache()
@@ -1823,12 +1844,12 @@ def screenQualityVI(pixel, index, nodataP, nodataI, nodataMask):
     
     bit16 = np.binary_repr(index, width=16)
     
-    if (bit16[2:5] in ['001','010','100','101'] and bit16[14:16] in ['00', '01', '10'] and 
+    if (bit16[2:5] in ['001', '010', '100', '101'] and bit16[14:16] in ['00', '01', '10'] and 
         bit16[9:13] in ['0000', '0001', '0010', '0011', '0100', '0101', '0111',
                         '1000']):
         p = pixel
     
-    elif bit16[2:5] in ['000','011','110','111']:
+    elif bit16[2:5] in ['000', '011', '110', '111']:
         p = nodataP
     else:
         p = nodataMask
