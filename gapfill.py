@@ -1,18 +1,15 @@
 # Implements the gapfill algorithm as in the gapfill package in R
 
 import numpy as np
-from datetime import datetime
 from osgeo import gdal
-import MODIS_gedata_toolbox as md
 from statsmodels.distributions.empirical_distribution import ECDF
 import scipy.stats as ss
 import pandas as pd
 import statsmodels.formula.api as smf
-from xml.dom import NoDataAllowedErr
 import MODIS_gedata_toolbox as md
 import os, re, multiprocessing
 import pathos.multiprocessing as mp
-import functools, dill, time
+import functools, dill
 
 
 def array2TwoDim(a):
@@ -182,9 +179,12 @@ def gapFill(rasters, seasons, years, outFolder, suffix, nodata=None,
         The function should only return one element at a time
     iMax (int): Maximum number of iterations until missing is 
         returned as a predicted value
-    subsetSeasons (list): list of seasons for which to predict missing values. 
+    subsetSeasons (list of lists): list or list of lists of seasons for which to 
+        predict missing values. 
+        It should be a list of num if seubsetYears is None.
+        It should be a list of lists with one liet per year in subsetYears.
         If None, all seasons are considered. Works as AND condition with 
-        subsetYears
+        subsetYears.
     subsetYears (list): list of years for which to predict missing values.
         If None, all years are considered. Works as AND condition with 
         subsetSeasons
@@ -202,15 +202,33 @@ def gapFill(rasters, seasons, years, outFolder, suffix, nodata=None,
         if not os.path.isfile(r):
             return False
     
-    if not subsetYears: 
+    #Check that the season subset has been provided in the right format
+    if not subsetYears:
         subsetYears = set(years)
         subsetYears = list(subsetYears)
         subsetYears.sort()
-    
+        
+        if subsetSeasons:
+            if any(isinstance(el, list) for el in subsetSeasons):
+                raise ValueError('subsetSeasons should be a simple list of ' +
+                                 'num if subsetYears is None')
+            
+            subsetSeasons = [subsetSeasons for _ in subsetYears]
+        
+    else:
+        if subsetSeasons:
+            if not len(subsetSeasons) == len(subsetYears):
+                raise ValueError('subsetSeasons should be a list of lists' +
+                                 'of the same length as subsetYears')
+            if not all(isinstance(el, list) for el in subsetSeasons):
+                raise ValueError('Each element of subsetSeasons should be a list' +
+                                 'with the seasons for that year')
+          
     if not subsetSeasons:
         subsetSeasons = set(seasons)
         subsetSeasons = list(subsetSeasons)
         subsetSeasons.sort()
+        subsetSeasons = [subsetSeasons for _ in subsetYears]
     
     # Import one band to get the array size
     try:
@@ -244,11 +262,15 @@ def gapFill(rasters, seasons, years, outFolder, suffix, nodata=None,
         p = mp.Pool(nCores)
     
     # Loop through all the rasters in the subset to fill the missing values
-    for y in subsetYears:
-        for s in subsetSeasons:
+    for y, S in zip(subsetYears, subsetSeasons):
+        for s in S:
             
             # Get the position of the raster for that year and season
-            rIndex = zip(seasons, years).index((s, y))
+            try:
+                rIndex = zip(seasons, years).index((s, y))
+            except ValueError:
+                #If that season and year is not there, go to the next pair
+                continue
             
             # Import that raster to get the positions of the missing values
             try:

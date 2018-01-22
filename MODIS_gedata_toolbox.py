@@ -12,11 +12,13 @@ from mpl_toolkits.axisartist.clip_path import clip
 # Imports
 
 import pymodis as pm
-import re, os, subprocess
+import re, os, multiprocessing
+import pathos.multiprocessing as mp
 from datetime import datetime, timedelta
 from osgeo import gdal, gdalconst, ogr
 import numpy as np
 from csv import DictWriter
+import functools, dill
 
 #####################################################################################################################
 #####################################################################################################################
@@ -423,7 +425,7 @@ def clipMaskRasterByShp(shp, raster, outRaster, clipR=True, maskR=True,
 
 
 def smoothMODISWrapper(root, regions, regionsIn, regionsOut, startSmooth, endSmooth, regWindow, avgWindow,
-                startSaveSmooth=None, endSaveSmooth=None, algo='Swets'):
+                startSaveSmooth=None, endSaveSmooth=None, algo='Swets', parallel=False, nCores=None):
     '''
     Function to do a temporal smoothing of a time series of identical images. 
         Does not return anything, saves smoothed images on disk.
@@ -475,39 +477,78 @@ def smoothMODISWrapper(root, regions, regionsIn, regionsOut, startSmooth, endSmo
     else:
         endSaveSmooth = datetime.strptime(endSaveSmooth, '%Y-%m-%d').date()
     
-    # Loop through the regions to do the smoothing for each
-    for r in regions:
-        print('Processing region ' + str(r) + '...')
+    # Declare parallel workers if option
+    if parallel and len(regions) > 1:
+        if not nCores:
+            nCores = multiprocessing.cpu_count()
         
-        # Import all the raw modis images on disk
-        onDisk = [os.path.join(root, r, regionsIn, f) 
-                  for f in os.listdir(os.path.join(root, r, regionsIn)) 
-                  if f.endswith('.tif')]
+        p = mp.Pool(nCores)
+    
+        pp = functools.partial(smoothRegionWrap, rootR=root, 
+                               regionsIn=regionsIn, 
+                               regionsOut=regionsOut, 
+                               startSmooth=startSmooth, 
+                               endSmooth=endSmooth, 
+                               regWindow=regWindow, 
+                               avgWindow=avgWindow,
+                               startSaveSmooth=startSaveSmooth, 
+                               endSaveSmooth=endSaveSmooth, 
+                               algo=algo)
+                
+        p.map(pp, regions)
         
-        # Dates of these files
-        datesAll = [re.search('_([0-9]{4}-[0-9]{2}-[0-9]{2})', f).group(1) 
-                    for f in onDisk]
-        # Transform into date format
-        datesAll = [datetime.strptime(d, '%Y-%m-%d').date() for d in datesAll]
+        # Close the threads
+        p.close()
+        p.join()
         
-        # Keep only the files and dates within the dates to process
-        onDisk = [f for f, d in zip(onDisk, datesAll) 
-                  if d >= startSmooth and d <= endSmooth]
-        datesAll = [d for d in datesAll if d >= startSmooth and d <= endSmooth]
-        
-        # Sort the two list by date
-        datesAll, onDisk = (list(x) for x in zip(*sorted(zip(datesAll, onDisk))))
-        
-        # Create a mask to know which of the dates to save
-        toSave = [d >= startSaveSmooth and d <= endSaveSmooth for d in datesAll]
-        
-        # Smooth the images
-        smoothSeries(inRasters=onDisk, toSave=toSave,
-                     outFolder=root + '/' + r + '/' + regionsOut,
-                     regWindow=regWindow,
-                     avgWindow=avgWindow,
-                     algo='Swets', blockXSize=256, blockYSize=256)
+    else:
+        # Loop through the regions to do the smoothing for each
+        for r in regions:
+            smoothRegionWrap(rootR=root, r=r, 
+                             regionsIn=regionsIn, 
+                             regionsOut=regionsOut, 
+                             startSmooth=startSmooth, 
+                             endSmooth=endSmooth, 
+                             regWindow=regWindow, 
+                             avgWindow=avgWindow,
+                             startSaveSmooth=startSaveSmooth, 
+                             endSaveSmooth=endSaveSmooth, 
+                             algo=algo)
 
+def smoothRegionWrap (r, rootR, regionsIn, regionsOut, 
+                      startSmooth, endSmooth, regWindow, avgWindow,
+                      startSaveSmooth, endSaveSmooth, algo):
+    
+    print('Processing region ' + str(r) + '...')
+        
+    # Import all the raw modis images on disk
+    onDisk = [os.path.join(rootR, r, regionsIn, f) 
+              for f in os.listdir(os.path.join(rootR, r, regionsIn)) 
+              if f.endswith('.tif') and 'NDVI' in f]
+    
+    # Dates of these files
+    datesAll = [re.search('_([0-9]{4}-[0-9]{2}-[0-9]{2})', f).group(1) 
+                for f in onDisk]
+    # Transform into date format
+    datesAll = [datetime.strptime(d, '%Y-%m-%d').date() for d in datesAll]
+    
+    # Keep only the files and dates within the dates to process
+    onDisk = [f for f, d in zip(onDisk, datesAll) 
+              if d >= startSmooth and d <= endSmooth]
+    datesAll = [d for d in datesAll if d >= startSmooth and d <= endSmooth]
+    
+    # Sort the two list by date
+    datesAll, onDisk = (list(x) for x in zip(*sorted(zip(datesAll, onDisk))))
+    
+    # Create a mask to know which of the dates to save
+    toSave = [d >= startSaveSmooth and d <= endSaveSmooth for d in datesAll]
+    
+    # Smooth the images
+    smoothSeries(inRasters=onDisk, toSave=toSave,
+                 outFolder=rootR + '/' + r + '/' + regionsOut,
+                 regWindow=regWindow,
+                 avgWindow=avgWindow,
+                 algo=algo, blockXSize=256, blockYSize=256)
 
 def smoothSeries(inRasters, toSave, outFolder, regWindow, avgWindow,
                  algo='Swets', blockXSize=256, blockYSize=256):
@@ -650,17 +691,22 @@ def smoothingSwets(block, regWindow, avgWindow, nodata=None):
             # Get the shape of the original data
             originShape = pixel.shape
             
-            # Reshape the data
-            pixel = np.reshape(pixel, (len(pixel), 1))
+            # Change the data type
             pixel = pixel.astype(np.float32)
             
             # Replace no data values by nan if needed
             if nodata:
                 pixel[pixel == nodata] = np.nan
             
-            # Interpolate missing values if any
-            # THIS SHOULD BE DONE BEFOREHAND FOR THE ENTIRE RASTER USING 
-            # TEMPORAL AND SPATIAL INFERENCE
+            #Keep track of the nodata value positions
+            miss = np.isnan(pixel)
+            
+            # Reshape the data
+            pixel = np.reshape(pixel, (len(pixel), 1))
+            
+            # Interpolate missing values if any just for the
+            # sake of the smoothing. The no data will be 
+            # added back to the output.
             # Get a mask of the nan values
             if np.isnan(pixel).any():
                 pixel = np.reshape(pixel, len(pixel))
@@ -794,6 +840,9 @@ def smoothingSwets(block, regWindow, avgWindow, nodata=None):
             
             smoothed[np.isnan(smoothed)] = nodata
             
+            #Replace the original missing pixels back
+            smoothed[miss] = nodata
+            
             block[X, Y, :] = smoothed
     
     return block
@@ -902,21 +951,33 @@ def savitzkyAvg(pixel):
             avg = pixel[0:7]
             # Do the weighted sum
             if i == 0:
-                out[i] = np.sum(np.multiply(avg, np.array([0.1190, -0.0714, -0.1429, -0.0952, 0.0714, 0.3571, 0.7619])))
+                out[i] = np.sum(
+                    np.multiply(avg, 
+                                np.array([0.1190, -0.0714, -0.1429, -0.0952, 0.0714, 0.3571, 0.7619])))
             elif i == 1:
-                out[i] = np.sum(np.multiply(avg, np.array([-0.0714, -0.0000, 0.0714, 0.1429, 0.2143, 0.2857, 0.3571])))
+                out[i] = np.sum(
+                    np.multiply(avg, 
+                                np.array([-0.0714, -0.0000, 0.0714, 0.1429, 0.2143, 0.2857, 0.3571])))
             elif i == 2:
-                out[i] = np.sum(np.multiply(avg, np.array([-0.1429, 0.0714, 0.2143, 0.2857, 0.2857, 0.2143, 0.0714])))
+                out[i] = np.sum(
+                    np.multiply(avg, 
+                                np.array([-0.1429, 0.0714, 0.2143, 0.2857, 0.2857, 0.2143, 0.0714])))
         elif i > (len(pixel) - 4):
             # Take the moving window
             avg = pixel[(len(pixel) - 7):]
             # Do the weighted sum
             if i == len(pixel) - 3:
-                out[i] = np.sum(np.multiply(avg, np.array([0.0714, 0.2143, 0.2857, 0.2857, 0.2143, 0.0714, -0.1429])))
+                out[i] = np.sum(
+                    np.multiply(avg, 
+                                np.array([0.0714, 0.2143, 0.2857, 0.2857, 0.2143, 0.0714, -0.1429])))
             elif i == len(pixel) - 2:
-                out[i] = np.sum(np.multiply(avg, np.array([0.3571, 0.2857, 0.2143, 0.1429, 0.0714, -0.0000, -0.0714])))
+                out[i] = np.sum(
+                    np.multiply(avg, 
+                                np.array([0.3571, 0.2857, 0.2143, 0.1429, 0.0714, -0.0000, -0.0714])))
             elif i == len(pixel) - 1:
-                out[i] = np.sum(np.multiply(avg, np.array([0.7619, 0.3571, 0.0714, -0.0952, -0.1429, -0.0714, 0.1190])))
+                out[i] = np.sum(
+                    np.multiply(avg, 
+                                np.array([0.7619, 0.3571, 0.0714, -0.0952, -0.1429, -0.0714, 0.1190])))
         else:
             # Take the moving window
             avg = pixel[i - 3:i + 4]
@@ -926,7 +987,8 @@ def savitzkyAvg(pixel):
     return(out)
             
 
-def createBaseline(root, regions, varieties, regionsIn, regionsOut, startRef, endRef, mask=None, outModelRaster=None):
+def createBaseline(root, regions, varieties, regionsIn, regionsOut, startRef, 
+                   endRef, mask=None, outModelRaster=None, parallel=False, nCores=None):
     '''
     Function to create baseline images with the decile values over the period 
         of interest. 
@@ -965,10 +1027,17 @@ def createBaseline(root, regions, varieties, regionsIn, regionsOut, startRef, en
         or each of the regions and varieties.
     '''
     
+    if parallel:
+        if not nCores:
+            nCores = multiprocessing.cpu_count()
+        
+        p = mp.Pool(nCores)
+    
     # Loop through the regions
     for r in range(len(regions)):
         # Get the names of all the smoothed rasters on file
-        onDisk = [f for f in os.listdir(os.path.join(root, regions[r], regionsIn)) 
+        onDisk = [os.path.join(root, regions[r], regionsIn, f) 
+                  for f in os.listdir(os.path.join(root, regions[r], regionsIn)) 
                   if f.endswith('.tif')]
         
         # Dates of these files
@@ -984,40 +1053,77 @@ def createBaseline(root, regions, varieties, regionsIn, regionsOut, startRef, en
         days.sort()
         
         for v in range(len(varieties[r])):
+            
+            # Check if there is a mask and a model for the output raster
+            if mask and mask[r] and mask[r][v]:
+                maskD = mask[r][v]
+            else:
+                maskD = None
+            if outModelRaster and outModelRaster[r] and outModelRaster[r][v]:
+                outModelRasterD = outModelRaster[r][v]
+            else:
+                outModelRasterD = None
+            
             # Loop through the dates to create a baseline raster for each
-            for d in days:
-                # Get the names of all the rasters for this date
-                dates = [datetime(y, 1, 1).date() + timedelta(days=d - 1) for 
-                         y in range(startRef, endRef + 1, 1)]
-                # dates = [datetime.strptime('0101'+str(y), '%d%m%Y').date()+timedelta(days=d-1) for y in range(startRef,endRef+1,1)]
-                files = [f for f, date in zip(onDisk, datesAll) if date in dates]
+            if parallel:
+                pp = functools.partial(decileWrap, 
+                                       startRef=startRef, 
+                                       endRef=endRef, 
+                                       onDisk=onDisk, 
+                                       datesAll=datesAll, 
+                                       root=root, 
+                                       region=regions[r], 
+                                       regionsOut=regionsOut, 
+                                       variety=varieties[r][v], 
+                                       maskD=maskD, 
+                                       outModelRasterD=outModelRasterD)
+                        
+                p.map(pp, days)
                 
-                # Check if there is a mask and a model for the output raster
-                if mask and mask[r] and mask[r][v]:
-                    maskD = mask[r][v]
-                else:
-                    maskD = None
-                if outModelRaster and outModelRaster[r] and outModelRaster[r][v]:
-                    outModelRasterD = outModelRaster[r][v]
-                else:
-                    outModelRasterD = None
-                
-                # Prepare outName
-                outName = (root + '/' + regions[r] + '/' + 
-                           regionsOut + '/' + 'ndvi_deciles_0to100pct_ref_period-' + 
-                           str(startRef) + '-' + str(endRef) + 
-                           '_day' + str(d) + '_date-' + 
-                           dates[0].strftime('%b-%d') + '_' + 
-                           varieties[r][v] + '.tif')
-                
-                # Create decile raster
-                createDecileRaster(images=files,
-                              outFile=outName,
-                              mask=maskD,
-                              outModelRaster=outModelRasterD,
-                              blockXSize=256, blockYSize=256)
+            else:
+                for d in days:
+                    decileWrap(d=d, startRef=startRef, 
+                               endRef=endRef, 
+                               onDisk=onDisk, 
+                               datesAll=datesAll, 
+                               root=root, 
+                               region=regions[r], 
+                               regionsOut=regionsOut, 
+                               variety=varieties[r][v], 
+                               maskD=maskD, 
+                               outModelRasterD=outModelRasterD)
+
+        
+    if parallel:
+        # Close the threads
+        p.close()
+        p.join()
 
 
+def decileWrap(d, startRef, endRef, onDisk, datesAll, 
+               root, region, regionsOut, variety, maskD, 
+               outModelRasterD):
+    # Get the names of all the rasters for this date
+    dates = [datetime(y, 1, 1).date() + timedelta(days=d - 1) for 
+             y in range(startRef, endRef + 1, 1)]
+    # dates = [datetime.strptime('0101'+str(y), '%d%m%Y').date()+timedelta(days=d-1) for y in range(startRef,endRef+1,1)]
+    files = [f for f, date in zip(onDisk, datesAll) if date in dates]
+    
+    # Prepare outName
+    outName = (root + '/' + region + '/' + 
+               regionsOut + '/' + 'ndvi_deciles_0to100pct_ref_period-' + 
+               str(startRef) + '-' + str(endRef) + 
+               '_day' + str(d) + '_date-' + 
+               dates[0].strftime('%b-%d') + '_' + 
+               variety + '.tif')
+    
+    # Create decile raster
+    createDecileRaster(images=files,
+                  outFile=outName,
+                  mask=maskD,
+                  outModelRaster=outModelRasterD,
+                  blockXSize=256, blockYSize=256)
+                
 def createDecileRaster(images, outFile, mask=None, outModelRaster=None, blockXSize=256, blockYSize=256):
     '''
     Takes a set of images that perfectly overlap (from different dates) and 
@@ -1085,7 +1191,7 @@ def createDecileRaster(images, outFile, mask=None, outModelRaster=None, blockXSi
         outModel = gdal.Open(outModelRaster)
         toProcess = [warp_raster(p, outModel, resampleOption='average', outputURI=None, outFormat='MEM') 
                      for p in toProcess]
-    
+        
     # Get the no data value if any
     nodata = toProcess[0].GetRasterBand(1).GetNoDataValue()
     
@@ -1123,7 +1229,7 @@ def createDecileRaster(images, outFile, mask=None, outModelRaster=None, blockXSi
             deciles = np.dsplit(deciles, 10)
             for i in range(10):
                 processed.GetRasterBand(i + 1).WriteArray(deciles[i][:, :, 0], xStep * blockXSize, yStep * blockYSize)
-    
+                    
     # Close the rasters
     for p in toProcess:
         p.FlushCache()
@@ -1559,12 +1665,12 @@ def computeAvgNdvi(root, regions, varieties, regionsIn, avgWeights, weightField=
             else:
                 avgW = None
             
-            # Compute the averages fo rall the dates
+            # Compute the averages for all the dates
             avgRegion = avgRegionRaster(images=onDisk,
                                         datesImg=datesAll,
                                         weightsRaster=avgW,
                                         weightField=weightField,
-                                        alltouch=False,
+                                        alltouch=alltouch,
                                         blockXSize=256, blockYSize=256)
             
             if not avgRegion:

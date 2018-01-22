@@ -23,15 +23,16 @@ def run_script(iface):
     # #PARAMETERS
     
     # MODIS date to map out
-    modisDate = '2017-11-17'
+    modisDate = '2017-10-16'
     
     # % of coffee masks to map out (the rasters for each should have been prepared in advance
     modisPct = ['5', '15']
     
     # Address for the working directory for MODIS and for the data (boundaries, cities)
-    modisPrefix = '/home/olivierp/jde_coffee/MODIS/collection6/Brazil'  # '/media/olivier/olivier_ext1/gedata_current/jde_coffee/MODIS/collection6'
-    dataPrefix = '/home/olivierp/jde_coffee/data/Brazil'  # '/media/olivier/olivier_ext1/gedata_current/jde_coffee/data'
-    
+    root = '/media/olivier/olivier_ext1/gedata_current/jde_coffee' # '/home/olivierp/jde_coffee'
+    modisPrefix = root+'/MODIS/collection6/Brazil' 
+    dataPrefix = root+'/data/Brazil' 
+        
     # Destination folder for the maps from the modisPrefix
     destFolder = 'maps'
     
@@ -141,14 +142,14 @@ def run_script(iface):
             # Import the shapefile with the cities
             city = QgsVectorLayer(dataPrefix + '/' + states[s] + '/places/' + cities[s], 'Cities', 'ogr')
             # Load style for the cities
-            city.loadNamedStyle('/home/olivierp/jde_coffee/MODIS/decile_comparison_style_cities.qml')
+            city.loadNamedStyle(root+'/MODIS/decile_comparison_style_cities.qml')
             
             # Import the modis raster layer
             modis = QgsRasterLayer(modisPrefix + '/' + states[s] + '/ndvi_' + modisDate + 
                                    '_CompareToDecile_0BelowMin_110AboveMax_' + varieties[s] + '_maskedbelow' + p + 'pct.tif')
             
             # Load style for modis
-            modis.loadNamedStyle('/home/olivierp/jde_coffee/MODIS/decile_comparison_style_purplebluescale.qml')
+            modis.loadNamedStyle(root+'/MODIS/decile_comparison_style_purplebluescale.qml')
             
             # Import the shapefile with the state boundaries
             bound = QgsVectorLayer(dataPrefix + '/' + states[s] + '/' + boundaries[s], boundNm, 'ogr')
@@ -167,7 +168,7 @@ def run_script(iface):
             # bound.triggerRepaint()
             
             # Add the layers to the registry
-            registry.addMapLayers([city, modis, bound])
+            registry.addMapLayers([modis, bound, city])
             
             # Zoom to extent of boundary layer
             canvas.setExtent(bound.extent())
@@ -198,10 +199,10 @@ def run_script(iface):
             for layer in registry.mapLayers().values():
                 layers[layer.name()] = layer.id()
             # Add them in the right order to the map
-            mapRenderer.setLayerSet([layers['Cities'], layers[boundNm], layers['']])
+            mapRenderer.setLayerSet([layers[boundNm], layers['Cities'], layers['']])
             
             # Set the zoom for the map
-            curExtent = bound.extent()
+            curExtent = modis.extent()
             mapRenderer.setExtent(curExtent)
             
             # Make Composition

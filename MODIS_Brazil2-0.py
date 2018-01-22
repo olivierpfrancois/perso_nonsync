@@ -23,7 +23,8 @@ import sys
 # Block python from writing pyc files
 sys.dont_write_bytecode = True
 
-import os, re
+import os, re, multiprocessing
+import pathos.multiprocessing as mp
 import MODIS_gedata_toolbox as md #GEDATA toolbox for MODIS related tools
 import gapfill #Python implementation of the interpolation algorithm
 from datetime import datetime
@@ -32,6 +33,11 @@ def main():
     #####################################################################################################################
     #####################################################################################################################
     # #PARAMETERS
+    
+    # Allow parallel computing?
+    allowPara = True
+    # Number of cores to use?
+    nCores = 3
     
     #Root folder
     prefixRootSys = '/media/olivier/olivier_ext1/gedata_current/jde_coffee' # 'E:/gedata_current' # '/home/olivierp' 
@@ -73,21 +79,19 @@ def main():
     # Process decision dummies
     
     # Download images
-    dload = True
+    dload = False
     # Mosaic images for each region and crop to extent 
-    mosaic = True
+    mosaic = False
     # Check quality 
-    checkQuality = True
+    checkQuality = False
     # Fill missing values and mask by exact AOI 
     fillMissing = False
-    # Mask images to specific extent of AOI
-    maskClips = False
     # Smooth images
     smooth = False
     # Create baselines
-    createBaselines = False
+    createBaselines = True
     # Rank individual images against baseline images
-    ranking = False
+    ranking = True
     #Average MODIS value in each region
     avgValue = False
     
@@ -113,7 +117,7 @@ def main():
     # Starting date for the files to mosaic
     #    If None, will default to the files that have been just downloaded if 
     #    any.
-    startMosaic = '2005-01-01'
+    startMosaic = '2017-11-01'
     # startMosaic = '2005-01-01'
     # Ending date for the files to mosaic
     #    If None, defaults to today
@@ -125,7 +129,7 @@ def main():
     # Output folder of the images to mask
     outCheck = statesMaskedFolder
     # Start date for the files to check
-    startCheck = '2011-01-01'
+    startCheck = '2017-11-01'
     # End date for the files to check
     endCheck = None
     
@@ -135,9 +139,9 @@ def main():
     # Output folder for the images to fill
     outMissing = statesFilledFolder
     # Year(s) of images to fill
-    yearsMissing = [2017]
+    yearsMissing = [2017,2018]
     # Day(s) of images to fill
-    daysMissing = [289,305,321,337,353]
+    daysMissing = [[337,353],[1]]
     # !!! The two conditions are additive (AND)
     
     ############ SMOOTH
@@ -146,7 +150,7 @@ def main():
     avgWindow = 3
     # Starting date for the files to include as input in the smoothing process
     #    If None, defaults to 1 year before the end smoothing date
-    startSmooth = None #'2012-03-01'
+    startSmooth = '2016-11-01' #'2012-03-01'
     # Ending date for the files to include as input in the smoothing process
     #    If None, defaults to today
     endSmooth = None
@@ -235,6 +239,9 @@ def main():
     #####################################################################################################################
     # #ACTIVE CODE
     
+    if allowPara and not nCores:
+        nCores = multiprocessing.cpu_count()
+    
     if dload:
         newHdf = md.downloadMODIS(dstFolder=os.path.join(dst, rawdataDir),
                                pwd=pwd, user=user, tiles=tiles, product=product, startDownload=startDownload,
@@ -254,6 +261,7 @@ def main():
                 print('No start date provided for mosaic. Will mosaic ' +
                       'downloaded images only')
             print('Starting the mosaic process')
+            
             md.mosaicMODISWrapper(root=dst,
                                   srcFolder=os.path.join(dst, rawdataDir),
                                   tmpFolder=tempDir,
@@ -323,18 +331,40 @@ def main():
             # Define the dataset
             dataset = zip(allNDVI, allQuality, allOut)
             
-            for d in dataset:
-                #Mask the low quality pixels
-                md.maskQualityVI(ndviRaster=d[0], qualityRaster=d[1], outRaster=d[2], nodataOut=-3000)
+            if allowPara:
+                p = mp.Pool(nCores)
                 
-                #Mask the pixels outside the shapefile
-                clipMaskRasterByShp(shp=b,
+                p.map(lambda d: md.maskQualityVI(ndviRaster=d[0], 
+                                                 qualityRaster=d[1], 
+                                                 outRaster=d[2], 
+                                                 nodataOut=-3000), 
+                      dataset)
+                
+                p.map(lambda d: md.clipMaskRasterByShp(shp=b,
                                     raster=d[2],
                                     outRaster=d[2], 
                                     clipR=False, 
                                     maskR=True, 
-                                    dataToMask=-3000, 
-                                    nodataOut=32767)
+                                    dataToMask=[-3000], 
+                                    nodataOut=32767), 
+                      dataset)
+            
+            else:
+                for d in dataset:
+                    #Mask the low quality pixels
+                    md.maskQualityVI(ndviRaster=d[0], 
+                                     qualityRaster=d[1], 
+                                     outRaster=d[2], 
+                                     nodataOut=-3000)
+                    
+                    #Mask the pixels outside the shapefile
+                    md.clipMaskRasterByShp(shp=b,
+                                        raster=d[2],
+                                        outRaster=d[2], 
+                                        clipR=False, 
+                                        maskR=True, 
+                                        dataToMask=[-3000], 
+                                        nodataOut=32767)
     
     if fillMissing:
         
@@ -360,14 +390,22 @@ def main():
                             outFolder=os.path.join(dst, s, outMissing),
                             suffix='f', nodata=[-3000], iMax=20,
                             subsetSeasons=daysMissing, subsetYears=yearsMissing, subsetMissing=None,
-                            clipRange=(-2000, 10000), parallel=True, nCores=3)
+                            clipRange=(-2000, 10000), parallel=allowPara, nCores=nCores)
             
             #Mask the resulting rasters to the specific extent of the AOI
-            for r in inputRasters:
+            for r, y, d in zip(inputRasters, years, days):
+                if (yearsMissing and not y in yearsMissing):
+                    continue
+                elif (yearsMissing and daysMissing and 
+                      not d in daysMissing[yearsMissing.index(y)]):
+                        continue
+                elif not yearsMissing and daysMissing and not d in daysMissing:
+                    continue
+                
                 nameR = os.path.join(dst, s, outMissing, 
                                      re.sub('.tif', '_f.tif',
                                             os.path.basename(r)))
-                clipMaskRasterByShp(shp=b,
+                md.clipMaskRasterByShp(shp=b,
                                     raster=nameR,
                                     outRaster=nameR, 
                                     clipR=False, 
@@ -375,9 +413,24 @@ def main():
                                     dataToMask=None, 
                                     nodataOut=32767)
         
-    
+    '''
+    for s, b in zip(states, statesBoundFiles):
+        inputRasters = [os.path.join(dst, s, outMissing, f) for 
+                            f in os.listdir(os.path.join(dst, s, outMissing)) 
+                            if f.endswith('.tif') and not '_f' in f]
+        
+        for r in inputRasters:
+            md.clipMaskRasterByShp(shp=b,
+                                    raster=r,
+                                    outRaster=r, 
+                                    clipR=False, 
+                                    maskR=True, 
+                                    dataToMask=None, 
+                                    nodataOut=32767)
+    '''
     if smooth:
         print('Starting the smoothing process')
+        
         md.smoothMODISWrapper(root=dst,
                        regions=states,
                        regionsIn=statesFilledFolder,
@@ -387,7 +440,9 @@ def main():
                        regWindow=regWindow,
                        avgWindow=avgWindow,
                        startSaveSmooth=startSaveS,
-                       endSaveSmooth=endSaveS)
+                       endSaveSmooth=endSaveS, 
+                       parallel=allowPara, 
+                       nCores=nCores)
     
     if createBaselines:
         print('Starting creation of baselines')
@@ -395,7 +450,9 @@ def main():
                           regionsIn=statesSmoothFolder, 
                           regionsOut=statesRefFolder,
                           startRef=startRef, endRef=endRef, mask=maskBaseline, 
-                          outModelRaster=outModelRaster)
+                          outModelRaster=outModelRaster,
+                          parallel=allowPara, 
+                          nCores=nCores)
     
     if ranking:
         print('Starting analysis of individual dates compared to baseline')
