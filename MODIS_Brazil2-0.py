@@ -85,15 +85,15 @@ def main():
     # Check quality 
     checkQuality = False
     # Fill missing values and mask by exact AOI 
-    fillMissing = False
+    fillMissing = True
     # Smooth images
-    smooth = False
+    smooth = True
     # Create baselines
-    createBaselines = True
+    createBaselines = False
     # Rank individual images against baseline images
     ranking = True
     #Average MODIS value in each region
-    avgValue = False
+    avgValue = True
     
     
     
@@ -139,9 +139,12 @@ def main():
     # Output folder for the images to fill
     outMissing = statesFilledFolder
     # Year(s) of images to fill
-    yearsMissing = [2017,2018]
+    yearsMissing = [2017]
     # Day(s) of images to fill
-    daysMissing = [[337,353],[1]]
+    daysMissing = [[305, 321]]
+    # Suffix to put at the end of the name of the 
+    # images after filling
+    suffMissing = 'f'
     # !!! The two conditions are additive (AND)
     
     ############ SMOOTH
@@ -195,7 +198,7 @@ def main():
     #    the baselines
     # Starting and ending dates for the images to consider. Included
     #   If None, will default to 60 days before the endRank date
-    startRank = '2017-06-15'
+    startRank = '2017-12-01'
     #   If None, will default to today
     endRank = None
     # Minimum density of coffee to consider 
@@ -388,7 +391,7 @@ def main():
             
             gapfill.gapFill(rasters=inputRasters, seasons=days, years=years,
                             outFolder=os.path.join(dst, s, outMissing),
-                            suffix='f', nodata=[-3000], iMax=20,
+                            suffix=suffMissing, nodata=[-3000], iMax=20,
                             subsetSeasons=daysMissing, subsetYears=yearsMissing, subsetMissing=None,
                             clipRange=(-2000, 10000), parallel=allowPara, nCores=nCores)
             
@@ -403,8 +406,9 @@ def main():
                     continue
                 
                 nameR = os.path.join(dst, s, outMissing, 
-                                     re.sub('.tif', '_f.tif',
+                                     re.sub('.tif', '_'+suffMissing+'.tif',
                                             os.path.basename(r)))
+                
                 md.clipMaskRasterByShp(shp=b,
                                     raster=nameR,
                                     outRaster=nameR, 

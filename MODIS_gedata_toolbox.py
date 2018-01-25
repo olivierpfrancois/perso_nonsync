@@ -3,6 +3,7 @@
 # complete information on how to create a script
 # and use Script Runner.
 from mpl_toolkits.axisartist.clip_path import clip
+from numpy import rank
 
 """ 
     Functions to handle the treatment of MODIS images, 
@@ -1147,19 +1148,26 @@ def createDecileRaster(images, outFile, mask=None, outModelRaster=None, blockXSi
     # Import all the images to use for estimating the deciles
     toProcess = [gdal.Open(f) for f in images]
     
+    # Get the no data value
+    nodata = toProcess[0].GetRasterBand(1).GetNoDataValue()
+    
     # Mask if there is a mask
     if mask:
         # I need to mask the rasters first to only have the coffee pixels when I change the resolution
         # Import the mask raster as an array
         p = gdal.Open(mask)
         nanMask = p.GetRasterBand(1).ReadAsArray()
+        nodataMask = p.GetRasterBand(1).GetNoDataValue()
         # Transform all the non zero values to nan
-        nanMask = np.logical_or(nanMask == 0, np.isnan(nanMask))
+        nanMask = np.logical_or(
+            np.logical_or(
+                nanMask == 0, np.isnan(nanMask)),
+                                nanMask==nodataMask)
         
         # Mask the rasters
         for p in toProcess:
             pBand = p.GetRasterBand(1).ReadAsArray()
-            pBand[nanMask] = np.nan
+            pBand[nanMask] = nodata
             toProcess[-1].GetRasterBand(1).WriteArray(pBand)
         
         p = None
@@ -1191,9 +1199,6 @@ def createDecileRaster(images, outFile, mask=None, outModelRaster=None, blockXSi
         outModel = gdal.Open(outModelRaster)
         toProcess = [warp_raster(p, outModel, resampleOption='average', outputURI=None, outFormat='MEM') 
                      for p in toProcess]
-        
-    # Get the no data value if any
-    nodata = toProcess[0].GetRasterBand(1).GetNoDataValue()
     
     # Remove existing raster if any
     if os.path.isfile(outFile):
@@ -1201,7 +1206,7 @@ def createDecileRaster(images, outFile, mask=None, outModelRaster=None, blockXSi
     
     # Create an empty copy with 10 layers to use for storing the deciles
     processed = new_raster_from_base(toProcess[0], outFile, 'GTiff',
-                                     np.nan, gdal.GDT_Float32, bands=10)
+                                     nodata, gdal.GDT_Float32, bands=10)
     
     # Get the size of the rasters to identify the limits of the blocks to loop through
     band = toProcess[1].GetRasterBand(1)
@@ -1256,16 +1261,15 @@ def estimateDeciles(block, nodata):
         for Y in range(extent[1]):
             pixel = np.copy(block[X, Y, :])
             
-            # Replace the no data value by nan if nodata was provided
-            if nodata:
-                pixel[pixel == nodata] = np.nan
+            # Replace the no data value by nan
+            pixel[pixel == nodata] = np.nan
             
             # Get the number of nan values in the pixel
             nbNodata = np.sum(np.isnan(pixel))
             
-            # Return nan if there are not more than 6 valid values
+            # Return no data if there are less than 6 valid values
             if len(pixel) - nbNodata < 6:
-                deciles[X, Y, :].fill(np.nan)
+                deciles[X, Y, :].fill(nodata)
                 continue
             
             # Remove the nan values and reshape the data
@@ -1350,7 +1354,7 @@ def rankDatesDeciles(root, regions, varieties, regionsIn, refDecilesIn, startRan
         onDisk = [f for f, d in zip(onDisk, datesAll) if d >= startRank and d <= endRank]
         datesAll = [d for d in datesAll if d >= startRank and d <= endRank]
         # Sort the two list by date
-        datesAll, onDisk = (list(x) for x in zip(*sorted(zip(datesAll, onDisk))))
+        #datesAll, onDisk = (list(x) for x in zip(*sorted(zip(datesAll, onDisk))))
         
         # Transform into days from start of the year and keep only the unique values
         days = [int(d.strftime('%j')) for d in datesAll]
@@ -1370,7 +1374,7 @@ def rankDatesDeciles(root, regions, varieties, regionsIn, refDecilesIn, startRan
                     maskD = None
                 
                 # Get the address of the decile raster
-                baseFile = [f for f in baseFiles if 'day' + str(day) + '_' and varieties[r][v] in f]
+                baseFile = [f for f in baseFiles if 'day' + str(day) + '_' in f and varieties[r][v] in f]
                 baseFile = os.path.join(root, regions[r], refDecilesIn, baseFile[0])
                 
                 # Create the output name
@@ -1460,9 +1464,10 @@ def estimateRankRaster(image, deciles, outFile, densityMask=None,
         # Remove existing raster if any
         if os.path.isfile(outRaster):
             os.remove(outRaster)
+        
         # Create an empty copy for storing the deciles comparisons
         processed = new_raster_from_base(baseImg, outRaster, 'GTiff',
-                                         - 32768, gdal.GDT_Int16, bands=1)
+                                         nodata, gdal.GDT_Int16, bands=1)
         
         for xStep in range(xBlocks):
             for yStep in range(yBlocks):
@@ -1477,9 +1482,6 @@ def estimateRankRaster(image, deciles, outFile, densityMask=None,
                                              blockXSize, blockYSize, band=b + 1) 
                              for b in range(baseImg.RasterCount)]
                 
-                # Bring the blocks together into one single array
-                blockBase = np.dstack(blockBase)
-                
                 if densityMask:
                     # Read the block from the mask 
                     blockMask = readRasterBlock(nanMask, xStep * blockXSize,
@@ -1492,8 +1494,12 @@ def estimateRankRaster(image, deciles, outFile, densityMask=None,
                         blockMask = blockMask <= m
                     
                     # Apply the mask
-                    blockSmooth[blockMask] = np.nan
-                    blockBase[blockMask] = np.nan
+                    blockSmooth[blockMask] = nodata
+                    for b in blockBase:
+                        b[blockMask] = nodata
+                
+                # Bring the blocks together into one single array
+                blockBase = np.dstack(blockBase)
                 
                 # Recast the type to be sure
                 blockSmooth = blockSmooth.astype(np.float32)
@@ -1540,19 +1546,13 @@ def estimateRank(block, ref, nodata):
             refPixel = np.copy(ref[X, Y, :])
             refPixel = np.reshape(refPixel, (len(refPixel), 1))
             
-            # Replace the no data value by nan if nodata was provided
-            if nodata:
-                refPixel[np.logical_or(refPixel == nodata, np.isinf(refPixel))] = np.nan
-                if testPixel == nodata or np.isinf(testPixel):
-                    testPixel = np.nan
-            else:
-                refPixel[np.isinf(refPixel)] = np.nan
-                if np.isinf(testPixel):
-                    testPixel = np.nan
+            # Replace the no data value by nan
+            refPixel[np.logical_or(refPixel == nodata, np.isinf(refPixel))] = np.nan
+            testPixel[np.logical_or(testPixel == nodata, np.isinf(testPixel))] = np.nan
             
-            # return nan if the test pixel is nodata
+            # return nan if the test pixel is nan or the ref pixel is nan
             if np.isnan(testPixel) or np.all(np.isnan(refPixel)):
-                ranking[X, Y] = -32768
+                ranking[X, Y] = nodata
                 continue
             
             # Get the position of the pixel in the reference deciles
@@ -1561,7 +1561,7 @@ def estimateRank(block, ref, nodata):
             rank = np.searchsorted(refPixel, testPixel) * 10
             
             # If the value is above the deciles, returns length of the vector
-            if len(refPixel) == 10 and rank == 100:
+            if len(refPixel)*10 == rank:
                 rank = 110
             # If the value is at min or below, returns 0
             if rank == 0:

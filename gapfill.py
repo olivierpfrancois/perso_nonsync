@@ -354,7 +354,7 @@ def gapFillOnePixel(pixel, season, year, files, seasons, years, replaceVal,
     i = 0 
     
     a = gapSubset(rasters=files, seasons=seasons, years=years,
-                 mp=mp, i=i, initialSize=[10, 10, 1, 5],
+                 mp=mp, i=i, initialSize=[10, 10, 1, 3],
                  nodata=replaceVal)
     
     # Predict the value
@@ -365,7 +365,7 @@ def gapFillOnePixel(pixel, season, year, files, seasons, years, replaceVal,
         i += 1
         
         aNew = gapSubset(rasters=files, seasons=seasons, years=years,
-                        mp=mp, i=i, initialSize=[10, 10, 1, 5],
+                        mp=mp, i=i, initialSize=[10, 10, 1, 3],
                         nodata=replaceVal)
         if aNew[0].shape == a[0].shape:
             break

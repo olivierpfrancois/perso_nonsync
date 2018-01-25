@@ -23,7 +23,7 @@ def run_script(iface):
     # #PARAMETERS
     
     # MODIS date to map out
-    modisDate = '2017-10-16'
+    modisDate = '2017-12-19'
     
     # % of coffee masks to map out (the rasters for each should have been prepared in advance
     modisPct = ['5', '15']
@@ -41,9 +41,9 @@ def run_script(iface):
     # Coffee varieties for each of the states
     varieties = ['arabica', 'arabica', 'arabica', 'arabica', 'robusta', 'arabica', 'arabica', 'arabica', 'arabica', 'robusta']  # Coffee variety for each map
     # Titles for each of the modis maps, to which the modis date will be added at the end
-    mapTitles = ['Centro Oeste Crop Health Index \nComparison to 10y History (2006-2016) \nArabica, ',
+    mapTitles = ['Cerrado Crop Health Index \nComparison to 10y History (2006-2016) \nArabica, ',
                  'Chapada Crop Health Index \nComparison to 10y History (2006-2016) \nArabica, ',
-                 'Cerrado Crop Health Index \nComparison to 10y History (2006-2016) \nArabica, ',
+                 'Centro Oeste Crop Health Index \nComparison to 10y History (2006-2016) \nArabica, ',
                  'Espirito Santo Crop Health Index \nComparison to 10y History (2006-2016) \nArabica, ',
                  'Espirito Santo Crop Health Index \nComparison to 10y History (2006-2016) \nRobusta, ',
                  'Mogiana Crop Health Index \nComparison to 10y History (2006-2016) \nArabica, ',
@@ -146,7 +146,7 @@ def run_script(iface):
             
             # Import the modis raster layer
             modis = QgsRasterLayer(modisPrefix + '/' + states[s] + '/ndvi_' + modisDate + 
-                                   '_CompareToDecile_0BelowMin_110AboveMax_' + varieties[s] + '_maskedbelow' + p + 'pct.tif')
+                                   '_CompareToDecile_0BelowMin_110AboveMax_' + varieties[s] + '_f3_maskedbelow' + p + 'pct.tif')
             
             # Load style for modis
             modis.loadNamedStyle(root+'/MODIS/decile_comparison_style_purplebluescale.qml')
