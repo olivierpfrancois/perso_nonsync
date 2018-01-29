@@ -7,14 +7,26 @@
     Script to download MODIS images from the server, 
     and mosaic the images and mask them for each region
     to process.
- """
+    
+    The image treatment process for each AOI is the following:
+    1- Download the MODIS tiles
+    2- Mosaic and cut the the extent of each AOI
+    3- Mask missing/bad quality pixels in entire extent and mark those that 
+        need to be filled
+    4- Fill missing values
+    5- Mask the image to only keep the pixels of interest
+    6- Smooth the images temporally
+    
+"""
+
 import sys
 # Block python from writing pyc files
 sys.dont_write_bytecode = True
 
-import os, re
-import MODIS_gedata_toolbox as md
-import gapfill
+import os, re, multiprocessing
+import pathos.multiprocessing as mp
+import MODIS_gedata_toolbox as md #GEDATA toolbox for MODIS related tools
+import gapfill #Python implementation of the interpolation algorithm
 from datetime import datetime
 
 def main():
@@ -22,38 +34,70 @@ def main():
     #####################################################################################################################
     # #PARAMETERS
     
-    prefixRootSys = '/media/olivier/olivier_ext1/gedata_current' # 'E:/gedata_current' # '/home/olivierp' 
+    # Allow parallel computing?
+    allowPara = True
+    # Number of cores to use?
+    nCores = 3
+    
+    #Root folder
+    prefixRootSys = '/media/olivier/olivier_ext1/gedata_current/jde_coffee' # 'E:/gedata_current' # '/home/olivierp' 
     
     # #DIRECTORIES parameters
     # Working directory
-    dst = prefixRootSys + '/jde_coffee/MODIS/collection6/Brazil'
+    dst = os.path.join(prefixRootSys, 'MODIS/collection6/Brazil')
     # Directory data sources
-    origin = prefixRootSys + '/jde_coffee/data/Brazil'
+    dataDir = os.path.join(prefixRootSys, 'data/Brazil')
     # Folder inside dst to use for temporary files (should be empty)
-    tempDir = prefixRootSys + '/jde_coffee/Temp'
-    # 'E:/gedata_current/jde_coffee/Temp'
-    # Destination folder for the download
-    rawdataDir = 'raw_data'
+    tempDir = os.path.join(prefixRootSys, 'Temp')
+    # Destination folder for the downloaded MODIS tiles
+    rawdataDir = os.path.join(dst, 'raw_data')
     
     # #REGIONS parameters
     # Regions to process inputs    !!!!SHOULD BE IN EPSG 4326 PROJECTION
     # Names of the regions (also folders names) 
     states = ["CER", "CHA", "CO", "ES", "MO", "SDM", "SP", "ZM"]
     # Varieties in each case
-    varieties = [['arabica'], ['arabica'], ['arabica'], ['arabica', 'robusta'], ['arabica'], ['arabica'], ['arabica'], ['arabica', 'robusta']]
-            # [['coffee']] 
+    varieties = [['arabica'], ['arabica'], ['arabica'], ['arabica', 'robusta'], 
+                 ['arabica'], ['arabica'], ['arabica'], ['arabica', 'robusta']]
     # Addresses of the shapefiles with the boundaries for each of the regions
-    # Address of the boundary files !!!!SHOULD BE IN EPSG 4326 PROJECTION
-    statesBoundFiles = [origin + '/' + s + '/aoi/AOI_' + s + '.shp' for s in states] 
-    # Name of subfolder where to save the raw mosaic data (should be in the folders of the regions)
+    # !!!!SHOULD BE IN EPSG 4326 PROJECTION
+    statesBoundFiles = [dataDir + '/' + s + '/aoi/AOI_' + s + '.shp' for s in states] 
+    # Name of subfolder in each region where to save the raw mosaic data 
+    # (should be in the folders of the regions)
     statesRawFolder = 'raw_data'
+    # Name of the subfolder where to save the masked images
+    statesMaskedFolder = 'masked_missing'
+    # Name of the subfolder where to save the filled images
+    statesFilledFolder = 'filled_missing'
     # Name of subfolder where to save the smoothed mosaic data (should be in the folders of the regions)
     statesSmoothFolder = 'smooth_data'
-    # Name of subfolder where to save (if produced) and get the reference baseline for each date in the year (should be in the folders of the regions)
+    # Name of subfolder where to save (if produced) and get the reference 
+    # baseline for each date in the year (should be in the folders of the regions)
     statesRefFolder = 'baseline'
     
-    # #DOWNLOAD parameters
+    
+    # Process decision dummies
+    
+    # Download images
     dload = False
+    # Mosaic images for each region and crop to extent 
+    mosaic = False
+    # Check quality 
+    checkQuality = False
+    # Fill missing values and mask by exact AOI 
+    fillMissing = True
+    # Smooth images
+    smooth = True
+    # Create baselines
+    createBaselines = False
+    # Rank individual images against baseline images
+    ranking = True
+    #Average MODIS value in each region
+    avgValue = True
+    
+    
+    
+    ########### DOWNLOAD
     # Product to download
     product = 'MOD13Q1.006'
     # Username for the earthdata website
@@ -64,46 +108,52 @@ def main():
     tiles = ['h13v10', 'h13v11', 'h14v10', 'h14v11']  # ['h28v07']
     # Start date for the product download (format YYYY-MM-DD)
     #    If None, will default to date of most recent MODIS file on disk if any, or stop the process
-    startDownload = None
-    # startDownload = '2017-05-26'
+    startDownload = None # '2017-05-26'
     # End date for the product download (format YYYY-MM-DD)
     #    If None, defaults to today
     endDownload = None
     
-    # #MOSAIC parameters
-    # Should the downloaded files be mosaiced for each of the regions?
-    mosaic = False
+    ############ MOSAIC
     # Starting date for the files to mosaic
-    #    If None, will default to the files that have been just downloaded if any.
-    startMosaic = '2017-10-01'
+    #    If None, will default to the files that have been just downloaded if 
+    #    any.
+    startMosaic = '2017-11-01'
     # startMosaic = '2005-01-01'
     # Ending date for the files to mosaic
     #    If None, defaults to today
-    endMosaic = None
-    # endMosaic = '2005-02-01'
+    endMosaic = None #'2005-02-01'
     
-    # masking missing values
-    checkQuality = False
+    ############ MASK QUALITY
+    # Input folder of the images to mask  
     inCheck = statesRawFolder
-    outCheck = 'masked_missing'
-    startCheck = '2011-01-01'
+    # Output folder of the images to mask
+    outCheck = statesMaskedFolder
+    # Start date for the files to check
+    startCheck = '2017-11-01'
+    # End date for the files to check
     endCheck = None
     
-    # filling missing values
-    fillMissing = True
-    inMissing = 'masked_missing'
-    outMissing = 'filled_missing'
+    ############ FILL MISSING
+    # Input folder for the images to fill
+    inMissing = statesMaskedFolder
+    # Output folder for the images to fill
+    outMissing = statesFilledFolder
+    # Year(s) of images to fill
     yearsMissing = [2017]
-    daysMissing = [289,305,321,337,353]
+    # Day(s) of images to fill
+    daysMissing = [[305, 321]]
+    # Suffix to put at the end of the name of the 
+    # images after filling
+    suffMissing = 'f'
+    # !!! The two conditions are additive (AND)
     
-    # #SMOOTHING parameters
-    smooth = False
+    ############ SMOOTH
+    # Size of the regression and average window (Swets algorithm)
     regWindow = 7
     avgWindow = 3
     # Starting date for the files to include as input in the smoothing process
     #    If None, defaults to 1 year before the end smoothing date
-    startSmooth = None
-    # startSmooth = '2012-03-01'
+    startSmooth = '2016-11-01' #'2012-03-01'
     # Ending date for the files to include as input in the smoothing process
     #    If None, defaults to today
     endSmooth = None
@@ -113,8 +163,7 @@ def main():
     # startSaveS = '2017-03-01'
     endSaveS = None  # None to save them up to the end smoothing date
     
-    # #Reference rasters parameters
-    createBaselines = False
+    ############ BASELINE
     # Starting and ending years for the reference period. Included.
     startRef = 2006
     endRef = 2016
@@ -123,7 +172,6 @@ def main():
     # The output model can have a different resolution, in which case the baseline will be produced with that resolution
     # maskBaseline = [['masks/LD_densities_coffee_from_classifications_250m.tif']]
     # outModelRaster = [['masks/LD_densities_coffee_from_classifications_1km.tif']]
-    
     maskBaseline = [[dst + '/CER/' + 'masks/CER_densities_arabica_from_classifications_250m.tif'],
                     [dst + '/CHA/' + 'masks/CHA_densities_arabica_from_classifications_250m.tif'],
                     [dst + '/CO/' + 'masks/CO_densities_arabica_from_classifications_250m.tif'],
@@ -145,16 +193,18 @@ def main():
                       [dst + '/ZM/' + 'masks/ZM_densities_arabica_from_classifications_1km.tif',
                             dst + '/ZM/' + 'masks/ZM_densities_robusta_from_classifications_1km.tif']]
     
-    # #Ranking individual dates modis images in terms of deciles using the baselines
-    ranking = False
+    ############ RANKING 
+    #Ranking individual dates modis images in terms of deciles using 
+    #    the baselines
     # Starting and ending dates for the images to consider. Included
     #   If None, will default to 60 days before the endRank date
-    startRank = '2017-06-15'
+    startRank = '2017-12-01'
     #   If None, will default to today
     endRank = None
-    # File to use for masking the output
+    # Minimum density of coffee to consider 
+    minCoffee = [0.05, 0.15]
+    # File to use for masking the output using the density
     # maskRank = [['masks/LD_densities_coffee_from_classifications_1km.tif']]
-    
     maskRank = [[dst + '/CER/' + 'masks/CER_densities_arabica_from_classifications_1km.tif'],
                 [dst + '/CHA/' + 'masks/CHA_densities_arabica_from_classifications_1km.tif'],
                 [dst + '/CO/' + 'masks/CO_densities_arabica_from_classifications_1km.tif'],
@@ -166,19 +216,13 @@ def main():
                 [dst + '/ZM/' + 'masks/ZM_densities_arabica_from_classifications_1km.tif',
                     dst + '/ZM/' + 'masks/ZM_densities_robusta_from_classifications_1km.tif']]
     
-    # Minimum density of coffee to consider 
-    minCoffee = [0.05, 0.15]
-    
-    # #Estimate average ndvi value for each region
-    avgValue = False
+    ############ AVERAGE
     # Starting and ending dates for the images to consider. Included
     #    If None, defaults to 1 year before today
     startAvg = '2006-01-01'
     #    If None, will default to today
     endAvg = None
     #Grid/Raster to use for the averaging --> FULL PATH!!!!!!!
-    # RASTER OPTION
-    # avgWeights = [[dst + '/LD/masks/LD_densities_coffee_from_classifications_250m.tif']]
     avgWeights = [[dst + '/CER/masks/CER_densities_arabica_from_classifications_250m.tif'],
                   [dst + '/CHA/masks/CHA_densities_arabica_from_classifications_250m.tif'],
                   [dst + '/CO/masks/CO_densities_arabica_from_classifications_250m.tif'],
@@ -189,12 +233,17 @@ def main():
                   [dst + '/SP/masks/SP_densities_arabica_from_classifications_250m.tif'],
                   [dst + '/ZM/masks/ZM_densities_arabica_from_classifications_250m.tif',
                    dst + '/ZM/masks/ZM_densities_robusta_from_classifications_250m.tif']]
-    
+    #Name of the field with the density information if the masks for averaging 
+    #    are shapefiles 
     weightField = None
+    
     
     #####################################################################################################################
     #####################################################################################################################
     # #ACTIVE CODE
+    
+    if allowPara and not nCores:
+        nCores = multiprocessing.cpu_count()
     
     if dload:
         newHdf = md.downloadMODIS(dstFolder=os.path.join(dst, rawdataDir),
@@ -212,8 +261,10 @@ def main():
         
         else:
             if not startMosaic:
-                print('No start date provided for mosaic. Will mosaic all files on disk')
+                print('No start date provided for mosaic. Will mosaic ' +
+                      'downloaded images only')
             print('Starting the mosaic process')
+            
             md.mosaicMODISWrapper(root=dst,
                                   srcFolder=os.path.join(dst, rawdataDir),
                                   tmpFolder=tempDir,
@@ -237,7 +288,7 @@ def main():
         if startCheck:
             startCheck = datetime.strptime(startCheck, '%Y-%m-%d').date()
         
-        for s in states:
+        for s, b in zip(states, statesBoundFiles):
             # Import all the raw ndvi modis images on disk
             allNDVI = [os.path.join(dst, s, inCheck, f) for 
                         f in os.listdir(os.path.join(dst, s, inCheck)) 
@@ -283,12 +334,44 @@ def main():
             # Define the dataset
             dataset = zip(allNDVI, allQuality, allOut)
             
-            for d in dataset:
-                md.maskQualityVI(ndviRaster=d[0], qualityRaster=d[1], outRaster=d[2], nodataOut=-3000)
+            if allowPara:
+                p = mp.Pool(nCores)
+                
+                p.map(lambda d: md.maskQualityVI(ndviRaster=d[0], 
+                                                 qualityRaster=d[1], 
+                                                 outRaster=d[2], 
+                                                 nodataOut=-3000), 
+                      dataset)
+                
+                p.map(lambda d: md.clipMaskRasterByShp(shp=b,
+                                    raster=d[2],
+                                    outRaster=d[2], 
+                                    clipR=False, 
+                                    maskR=True, 
+                                    dataToMask=[-3000], 
+                                    nodataOut=32767), 
+                      dataset)
+            
+            else:
+                for d in dataset:
+                    #Mask the low quality pixels
+                    md.maskQualityVI(ndviRaster=d[0], 
+                                     qualityRaster=d[1], 
+                                     outRaster=d[2], 
+                                     nodataOut=-3000)
+                    
+                    #Mask the pixels outside the shapefile
+                    md.clipMaskRasterByShp(shp=b,
+                                        raster=d[2],
+                                        outRaster=d[2], 
+                                        clipR=False, 
+                                        maskR=True, 
+                                        dataToMask=[-3000], 
+                                        nodataOut=32767)
     
     if fillMissing:
         
-        for s in states:
+        for s, b in zip(states, statesBoundFiles):
             inputRasters = [os.path.join(dst, s, inMissing, f) for 
                             f in os.listdir(os.path.join(dst, s, inMissing)) 
                             if f.endswith('.tif')]
@@ -308,38 +391,87 @@ def main():
             
             gapfill.gapFill(rasters=inputRasters, seasons=days, years=years,
                             outFolder=os.path.join(dst, s, outMissing),
-                            suffix='f', nodata=[-3000], iMax=20,
+                            suffix=suffMissing, nodata=[-3000], iMax=20,
                             subsetSeasons=daysMissing, subsetYears=yearsMissing, subsetMissing=None,
-                            clipRange=(-2000, 10000), parallel=True, nCores=3)
-    
-    
+                            clipRange=(-2000, 10000), parallel=allowPara, nCores=nCores)
+            
+            #Mask the resulting rasters to the specific extent of the AOI
+            for r, y, d in zip(inputRasters, years, days):
+                if (yearsMissing and not y in yearsMissing):
+                    continue
+                elif (yearsMissing and daysMissing and 
+                      not d in daysMissing[yearsMissing.index(y)]):
+                        continue
+                elif not yearsMissing and daysMissing and not d in daysMissing:
+                    continue
+                
+                nameR = os.path.join(dst, s, outMissing, 
+                                     re.sub('.tif', '_'+suffMissing+'.tif',
+                                            os.path.basename(r)))
+                
+                md.clipMaskRasterByShp(shp=b,
+                                    raster=nameR,
+                                    outRaster=nameR, 
+                                    clipR=False, 
+                                    maskR=True, 
+                                    dataToMask=None, 
+                                    nodataOut=32767)
+        
+    '''
+    for s, b in zip(states, statesBoundFiles):
+        inputRasters = [os.path.join(dst, s, outMissing, f) for 
+                            f in os.listdir(os.path.join(dst, s, outMissing)) 
+                            if f.endswith('.tif') and not '_f' in f]
+        
+        for r in inputRasters:
+            md.clipMaskRasterByShp(shp=b,
+                                    raster=r,
+                                    outRaster=r, 
+                                    clipR=False, 
+                                    maskR=True, 
+                                    dataToMask=None, 
+                                    nodataOut=32767)
+    '''
     if smooth:
         print('Starting the smoothing process')
+        
         md.smoothMODISWrapper(root=dst,
                        regions=states,
-                       regionsIn=statesRawFolder,
+                       regionsIn=statesFilledFolder,
                        regionsOut=statesSmoothFolder,
                        startSmooth=startSmooth,
                        endSmooth=endSmooth,
                        regWindow=regWindow,
                        avgWindow=avgWindow,
                        startSaveSmooth=startSaveS,
-                       endSaveSmooth=endSaveS)
+                       endSaveSmooth=endSaveS, 
+                       parallel=allowPara, 
+                       nCores=nCores)
     
     if createBaselines:
         print('Starting creation of baselines')
-        md.createBaseline(root=dst, regions=states, varieties=varieties, regionsIn=statesSmoothFolder, regionsOut=statesRefFolder,
-                       startRef=startRef, endRef=endRef, mask=maskBaseline, outModelRaster=outModelRaster)
+        md.createBaseline(root=dst, regions=states, varieties=varieties, 
+                          regionsIn=statesSmoothFolder, 
+                          regionsOut=statesRefFolder,
+                          startRef=startRef, endRef=endRef, mask=maskBaseline, 
+                          outModelRaster=outModelRaster,
+                          parallel=allowPara, 
+                          nCores=nCores)
     
     if ranking:
         print('Starting analysis of individual dates compared to baseline')
-        md.rankDatesDeciles(root=dst, regions=states, varieties=varieties, regionsIn=statesSmoothFolder, refDecilesIn=statesRefFolder,
-                       startRank=startRank, endRank=endRank, mask=maskRank, minDensity=minCoffee)
+        md.rankDatesDeciles(root=dst, regions=states, varieties=varieties, 
+                            regionsIn=statesSmoothFolder, 
+                            refDecilesIn=statesRefFolder,
+                            startRank=startRank, endRank=endRank, 
+                            mask=maskRank, minDensity=minCoffee)
 
     if avgValue:
         print('Computing the average ndvi value for each zone')
-        md.computeAvgNdvi(root=dst, regions=states, varieties=varieties, regionsIn=statesSmoothFolder, avgWeights=avgWeights,
-                       weightField=weightField, startAvg=startAvg, endAvg=endAvg)
+        md.computeAvgNdvi(root=dst, regions=states, varieties=varieties, 
+                          regionsIn=statesSmoothFolder, avgWeights=avgWeights,
+                          weightField=weightField, startAvg=startAvg, 
+                          endAvg=endAvg)
 
 
 if __name__ == '__main__':
