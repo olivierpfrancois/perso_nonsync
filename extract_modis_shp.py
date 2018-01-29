@@ -5,19 +5,23 @@
 
 """ Your Description of the script goes here """
 
-# Some commonly used imports
+import sys
+# Block python from writing pyc files
+sys.dont_write_bytecode = True
 
+# Imports
 from datetime import datetime, timedelta
 from osgeo import gdal, gdalconst, ogr
-import os, re, sys, osr
+import os, re, osr
 import numpy as np
 from csv import DictWriter
 
-sys.path.append('/home/olivier/OlivierGithub/QGIS-scripts')
+sys.path.append('/home/olivier/OlivierGithub/QGIS-scripts') #('C:/Users/Olivier/OlivierGithub')
 import projection_function as proj
 import image_proc_functions as img
 
-def run_script(iface):
+
+def main():
     
     #Root directory for the modis data
     root = '/media/olivier/olivier_ext1/gedata_current/jde_coffee/MODIS/collection6' #'E:/gedata_current/jde_coffee/MODIS/collection6'
@@ -26,7 +30,7 @@ def run_script(iface):
     tempDir = 'Temp'
     
     #Destination directory of the extracted modis information
-    dst = '/media/olivier/olivier_ext1/gedata_current/jde_coffee/MODIS/collection6'
+    dst = root
     
     ##REGIONS parameters
     #Regions to process inputs    !!!!SHOULD BE IN EPSG 4326 PROJECTION
@@ -45,7 +49,7 @@ def run_script(iface):
     #Start date for extraction
     startd = '2006-01-01'
     #End date for extraction
-    endd = '2017-09-30'
+    endd = '2018-01-01'
     
     masks = [['masks/CER_densities_arabica_from_classifications_250m.tif'],
                     ['masks/CHA_densities_arabica_from_classifications_250m.tif'],
@@ -63,7 +67,10 @@ def run_script(iface):
 
 
 
-def extractModis(root, regions, varieties, regionsIn, outFolder, masks, startExtract, endExtract, shpName, attr, tempDir, exportFormat, epsgShp=None):
+def extractModis(root, regions, varieties, regionsIn, 
+                 outFolder, masks, startExtract, endExtract, 
+                 shpName, attr, tempDir, exportFormat, 
+                 epsgShp=None):
     
     #Transform into date format
     if not endExtract:
@@ -628,3 +635,6 @@ def new_raster_from_base(base, outputURI, formatR, nodata, datatype, bands=None)
         new_raster.GetRasterBand(i + 1).Fill(nodata)
 
     return new_raster
+
+if __name__ == '__main__':
+    main()
