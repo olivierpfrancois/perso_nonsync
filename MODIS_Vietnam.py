@@ -84,15 +84,15 @@ def main():
     # Check quality 
     checkQuality = False
     # Fill missing values and mask by exact AOI 
-    fillMissing = True
+    fillMissing = False
     # Smooth images
-    smooth = True
+    smooth = False
     # Create baselines
-    createBaselines = False
+    createBaselines = True
     # Rank individual images against baseline images
-    ranking = True
+    ranking = False
     # Average MODIS value in each region
-    avgValue = True
+    avgValue = False
     
     # Get the percentage of missing values for each pixel across history
     checkPercMissing = False
@@ -109,7 +109,7 @@ def main():
     tiles = ['h28v07']  # ['h28v07']
     # Start date for the product download (format YYYY-MM-DD)
     #    If None, will default to date of most recent MODIS file on disk if any, or stop the process
-    startDownload = None  # '2017-05-26'
+    startDownload = '2017-11-10'  # '2017-05-26'
     # End date for the product download (format YYYY-MM-DD)
     #    If None, defaults to today
     endDownload = None
@@ -118,7 +118,7 @@ def main():
     # Starting date for the files to mosaic
     #    If None, will default to the files that have been just downloaded if 
     #    any.
-    startMosaic = '2017-11-01'
+    startMosaic = '2017-11-10'
     # startMosaic = '2005-01-01'
     # Ending date for the files to mosaic
     #    If None, defaults to today
@@ -130,7 +130,7 @@ def main():
     # Output folder of the images to mask
     outCheck = statesMaskedFolder
     # Start date for the files to check
-    startCheck = '2017-11-01'
+    startCheck = '2017-11-10'
     # End date for the files to check
     endCheck = None
     
@@ -140,9 +140,9 @@ def main():
     # Output folder for the images to fill
     outMissing = statesFilledFolder
     # Year(s) of images to fill
-    yearsMissing = [2017]
+    yearsMissing = [2017, 2018]
     # Day(s) of images to fill
-    daysMissing = [[305, 321]]
+    daysMissing = [[321, 337, 353], [1]]
     # Suffix to put at the end of the name of the 
     # images after filling
     suffMissing = 'f'

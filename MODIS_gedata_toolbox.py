@@ -49,8 +49,12 @@ def downloadMODIS(dstFolder, pwd, user, tiles, product, startDownload=None, endD
     if not endDownload:
         # Defaults to today's date
         endDownload = datetime.now()
-        endDownload = endDownload.strftime('%Y-%m-%d')
+    else:
+        endDownload = datetime.strptime(endDownload, '%Y-%m-%d').date()
         
+    if startDownload:
+        startDownload = datetime.strptime(startDownload, '%Y-%m-%d').date()
+    
     # Get the names of the hdf files already downloaded and processed
     # thereTif = [f for f in os.listdir(dstFolder) if f.endswith('.tif')]
     thereHdf = [f for f in os.listdir(dstFolder) if f.endswith('.hdf')]
@@ -65,27 +69,42 @@ def downloadMODIS(dstFolder, pwd, user, tiles, product, startDownload=None, endD
         datesHdf = []
         # datesTif = []
     
-    # Get latest date of the file on disk
-    if datesHdf and not startDownload:
-        startDownload = max(datesHdfD).strftime('%Y-%m-%d')
-    
-    if not startDownload:
+    if not datesHdf and not startDownload:
         print('There are no files on disk. Choose a start date for the download.')
         return
+    
+    # Get latest date of the file on disk
+    if datesHdf and not startDownload:
+        startDownload = max(datesHdfD)
+        startDownload = min(startDownload, endDownload - timedelta(days=120))
+        
+    for f, d in zip(thereHdf, datesHdfD):
+        if d >= startDownload:
+            os.remove(os.path.join(dstFolder, f))
+            os.remove(os.path.join(dstFolder, f + '.xml'))
+        
+    startDownload = startDownload.strftime('%Y-%m-%d')
+        
+    endDownload = endDownload.strftime('%Y-%m-%d')
     
     # Download 
     down = pm.downmodis.downModis(destinationFolder=dstFolder, password=pwd,
                                   user=user, url="https://e4ftl01.cr.usgs.gov",
                                   tiles=tiles, path='MOLT', product=product,
-                                  today=endDownload, enddate=startDownload,
+                                  today=startDownload, enddate=endDownload,
                                   jpg=False, debug=False, timeout=30,
                                   checkgdal=True)
     down._connectHTTP()
     down.downloadsAllDay()
     
-    # Get the list of new hdf files on disk
+    # Get the list of downloaded hdf files on disk
     newHdf = [f for f in os.listdir(dstFolder) if f.endswith('.hdf')]
-    newHdf = [f for f in newHdf if f not in thereHdf]
+    datesHdf = [re.search('A([0-9]{7})', f).group(1) for f in newHdf]
+    datesHdf = [datetime.strptime('0101' + d[0:4], "%d%m%Y").date() + timedelta(days=int(d[4:])) 
+                    for d in datesHdf]
+    
+    newHdf = [f for f, d in zip(newHdf, datesHdf) if 
+              d > datetime.strptime(startDownload, '%Y-%m-%d').date()]
     
     if newHdf:
         print(str(len(newHdf)) + ' images downloaded')
@@ -485,15 +504,15 @@ def smoothMODISWrapper(root, regions, regionsIn, regionsOut, startSmooth, endSmo
         
         p = mp.Pool(nCores)
     
-        pp = functools.partial(smoothRegionWrap, rootR=root, 
-                               regionsIn=regionsIn, 
-                               regionsOut=regionsOut, 
-                               startSmooth=startSmooth, 
-                               endSmooth=endSmooth, 
-                               regWindow=regWindow, 
+        pp = functools.partial(smoothRegionWrap, rootR=root,
+                               regionsIn=regionsIn,
+                               regionsOut=regionsOut,
+                               startSmooth=startSmooth,
+                               endSmooth=endSmooth,
+                               regWindow=regWindow,
                                avgWindow=avgWindow,
-                               startSaveSmooth=startSaveSmooth, 
-                               endSaveSmooth=endSaveSmooth, 
+                               startSaveSmooth=startSaveSmooth,
+                               endSaveSmooth=endSaveSmooth,
                                algo=algo)
                 
         p.map(pp, regions)
@@ -505,18 +524,19 @@ def smoothMODISWrapper(root, regions, regionsIn, regionsOut, startSmooth, endSmo
     else:
         # Loop through the regions to do the smoothing for each
         for r in regions:
-            smoothRegionWrap(rootR=root, r=r, 
-                             regionsIn=regionsIn, 
-                             regionsOut=regionsOut, 
-                             startSmooth=startSmooth, 
-                             endSmooth=endSmooth, 
-                             regWindow=regWindow, 
+            smoothRegionWrap(rootR=root, r=r,
+                             regionsIn=regionsIn,
+                             regionsOut=regionsOut,
+                             startSmooth=startSmooth,
+                             endSmooth=endSmooth,
+                             regWindow=regWindow,
                              avgWindow=avgWindow,
-                             startSaveSmooth=startSaveSmooth, 
-                             endSaveSmooth=endSaveSmooth, 
+                             startSaveSmooth=startSaveSmooth,
+                             endSaveSmooth=endSaveSmooth,
                              algo=algo)
 
-def smoothRegionWrap (r, rootR, regionsIn, regionsOut, 
+
+def smoothRegionWrap (r, rootR, regionsIn, regionsOut,
                       startSmooth, endSmooth, regWindow, avgWindow,
                       startSaveSmooth, endSaveSmooth, algo):
     
@@ -550,6 +570,7 @@ def smoothRegionWrap (r, rootR, regionsIn, regionsOut,
                  regWindow=regWindow,
                  avgWindow=avgWindow,
                  algo=algo, blockXSize=256, blockYSize=256)
+
 
 def smoothSeries(inRasters, toSave, outFolder, regWindow, avgWindow,
                  algo='Swets', blockXSize=256, blockYSize=256):
@@ -699,7 +720,7 @@ def smoothingSwets(block, regWindow, avgWindow, nodata=None):
             if nodata:
                 pixel[pixel == nodata] = np.nan
             
-            #Keep track of the nodata value positions
+            # Keep track of the nodata value positions
             miss = np.isnan(pixel)
             
             # Reshape the data
@@ -841,7 +862,7 @@ def smoothingSwets(block, regWindow, avgWindow, nodata=None):
             
             smoothed[np.isnan(smoothed)] = nodata
             
-            #Replace the original missing pixels back
+            # Replace the original missing pixels back
             smoothed[miss] = nodata
             
             block[X, Y, :] = smoothed
@@ -953,15 +974,15 @@ def savitzkyAvg(pixel):
             # Do the weighted sum
             if i == 0:
                 out[i] = np.sum(
-                    np.multiply(avg, 
+                    np.multiply(avg,
                                 np.array([0.1190, -0.0714, -0.1429, -0.0952, 0.0714, 0.3571, 0.7619])))
             elif i == 1:
                 out[i] = np.sum(
-                    np.multiply(avg, 
+                    np.multiply(avg,
                                 np.array([-0.0714, -0.0000, 0.0714, 0.1429, 0.2143, 0.2857, 0.3571])))
             elif i == 2:
                 out[i] = np.sum(
-                    np.multiply(avg, 
+                    np.multiply(avg,
                                 np.array([-0.1429, 0.0714, 0.2143, 0.2857, 0.2857, 0.2143, 0.0714])))
         elif i > (len(pixel) - 4):
             # Take the moving window
@@ -969,15 +990,15 @@ def savitzkyAvg(pixel):
             # Do the weighted sum
             if i == len(pixel) - 3:
                 out[i] = np.sum(
-                    np.multiply(avg, 
+                    np.multiply(avg,
                                 np.array([0.0714, 0.2143, 0.2857, 0.2857, 0.2143, 0.0714, -0.1429])))
             elif i == len(pixel) - 2:
                 out[i] = np.sum(
-                    np.multiply(avg, 
+                    np.multiply(avg,
                                 np.array([0.3571, 0.2857, 0.2143, 0.1429, 0.0714, -0.0000, -0.0714])))
             elif i == len(pixel) - 1:
                 out[i] = np.sum(
-                    np.multiply(avg, 
+                    np.multiply(avg,
                                 np.array([0.7619, 0.3571, 0.0714, -0.0952, -0.1429, -0.0714, 0.1190])))
         else:
             # Take the moving window
@@ -988,7 +1009,7 @@ def savitzkyAvg(pixel):
     return(out)
             
 
-def createBaseline(root, regions, varieties, regionsIn, regionsOut, startRef, 
+def createBaseline(root, regions, varieties, regionsIn, regionsOut, startRef,
                    endRef, mask=None, outModelRaster=None, parallel=False, nCores=None):
     '''
     Function to create baseline images with the decile values over the period 
@@ -1067,33 +1088,32 @@ def createBaseline(root, regions, varieties, regionsIn, regionsOut, startRef,
             
             # Loop through the dates to create a baseline raster for each
             if parallel:
-                pp = functools.partial(decileWrap, 
-                                       startRef=startRef, 
-                                       endRef=endRef, 
-                                       onDisk=onDisk, 
-                                       datesAll=datesAll, 
-                                       root=root, 
-                                       region=regions[r], 
-                                       regionsOut=regionsOut, 
-                                       variety=varieties[r][v], 
-                                       maskD=maskD, 
+                pp = functools.partial(decileWrap,
+                                       startRef=startRef,
+                                       endRef=endRef,
+                                       onDisk=onDisk,
+                                       datesAll=datesAll,
+                                       root=root,
+                                       region=regions[r],
+                                       regionsOut=regionsOut,
+                                       variety=varieties[r][v],
+                                       maskD=maskD,
                                        outModelRasterD=outModelRasterD)
                         
                 p.map(pp, days)
                 
             else:
                 for d in days:
-                    decileWrap(d=d, startRef=startRef, 
-                               endRef=endRef, 
-                               onDisk=onDisk, 
-                               datesAll=datesAll, 
-                               root=root, 
-                               region=regions[r], 
-                               regionsOut=regionsOut, 
-                               variety=varieties[r][v], 
-                               maskD=maskD, 
+                    decileWrap(d=d, startRef=startRef,
+                               endRef=endRef,
+                               onDisk=onDisk,
+                               datesAll=datesAll,
+                               root=root,
+                               region=regions[r],
+                               regionsOut=regionsOut,
+                               variety=varieties[r][v],
+                               maskD=maskD,
                                outModelRasterD=outModelRasterD)
-
         
     if parallel:
         # Close the threads
@@ -1101,8 +1121,8 @@ def createBaseline(root, regions, varieties, regionsIn, regionsOut, startRef,
         p.join()
 
 
-def decileWrap(d, startRef, endRef, onDisk, datesAll, 
-               root, region, regionsOut, variety, maskD, 
+def decileWrap(d, startRef, endRef, onDisk, datesAll,
+               root, region, regionsOut, variety, maskD,
                outModelRasterD):
     # Get the names of all the rasters for this date
     dates = [datetime(y, 1, 1).date() + timedelta(days=d - 1) for 
@@ -1124,6 +1144,7 @@ def decileWrap(d, startRef, endRef, onDisk, datesAll,
                   mask=maskD,
                   outModelRaster=outModelRasterD,
                   blockXSize=256, blockYSize=256)
+
                 
 def createDecileRaster(images, outFile, mask=None, outModelRaster=None, blockXSize=256, blockYSize=256):
     '''
@@ -1162,13 +1183,13 @@ def createDecileRaster(images, outFile, mask=None, outModelRaster=None, blockXSi
         nanMask = np.logical_or(
             np.logical_or(
                 nanMask == 0, np.isnan(nanMask)),
-                                nanMask==nodataMask)
+                                nanMask == nodataMask)
         
         # Mask the rasters
-        for p in toProcess:
-            pBand = p.GetRasterBand(1).ReadAsArray()
+        for p in range(len(toProcess)):
+            pBand = toProcess[p].GetRasterBand(1).ReadAsArray()
             pBand[nanMask] = nodata
-            toProcess[-1].GetRasterBand(1).WriteArray(pBand)
+            toProcess[p].GetRasterBand(1).WriteArray(pBand)
         
         p = None
         pBand = None
@@ -1219,7 +1240,7 @@ def createDecileRaster(images, outFile, mask=None, outModelRaster=None, blockXSi
     
     for xStep in range(xBlocks):
         for yStep in range(yBlocks):
-        
+            
             block = [readRasterBlock(p, xStep * blockXSize, yStep * blockYSize, blockXSize, blockYSize) for p in toProcess]
             
             # Bring the blocks together into one single array
@@ -1354,7 +1375,7 @@ def rankDatesDeciles(root, regions, varieties, regionsIn, refDecilesIn, startRan
         onDisk = [f for f, d in zip(onDisk, datesAll) if d >= startRank and d <= endRank]
         datesAll = [d for d in datesAll if d >= startRank and d <= endRank]
         # Sort the two list by date
-        #datesAll, onDisk = (list(x) for x in zip(*sorted(zip(datesAll, onDisk))))
+        # datesAll, onDisk = (list(x) for x in zip(*sorted(zip(datesAll, onDisk))))
         
         # Transform into days from start of the year and keep only the unique values
         days = [int(d.strftime('%j')) for d in datesAll]
@@ -1561,7 +1582,7 @@ def estimateRank(block, ref, nodata):
             rank = np.searchsorted(refPixel, testPixel) * 10
             
             # If the value is above the deciles, returns length of the vector
-            if len(refPixel)*10 == rank:
+            if len(refPixel) * 10 == rank:
                 rank = 110
             # If the value is at min or below, returns 0
             if rank == 0:
@@ -1912,6 +1933,11 @@ def maskQualityVI(ndviRaster, qualityRaster, outRaster=None, nodataOut=None):
         p[...] = screenQualityVI(p, q, nodataNdvi, nodataQual, nodataOut)
     
     if outRaster:
+        try:
+            os.remove(outRaster)
+        except:
+            pass
+        
         # Create an empty raster copy
         out = new_raster_from_base(ndvi, outRaster, 'GTiff', nodataNdvi,
                                    getattr(gdal,
