@@ -48,7 +48,7 @@ def downloadMODIS(dstFolder, pwd, user, tiles, product, startDownload=None, endD
     
     if not endDownload:
         # Defaults to today's date
-        endDownload = datetime.now()
+        endDownload = datetime.now().date()
     else:
         endDownload = datetime.strptime(endDownload, '%Y-%m-%d').date()
         
@@ -79,9 +79,12 @@ def downloadMODIS(dstFolder, pwd, user, tiles, product, startDownload=None, endD
         startDownload = min(startDownload, endDownload - timedelta(days=120))
         
     for f, d in zip(thereHdf, datesHdfD):
-        if d >= startDownload:
-            os.remove(os.path.join(dstFolder, f))
-            os.remove(os.path.join(dstFolder, f + '.xml'))
+        if d >= startDownload and d <= endDownload:
+            try:
+                os.remove(os.path.join(dstFolder, f))
+                os.remove(os.path.join(dstFolder, f + '.xml'))
+            except:
+                pass
         
     startDownload = startDownload.strftime('%Y-%m-%d')
         
@@ -422,6 +425,8 @@ def clipMaskRasterByShp(shp, raster, outRaster, clipR=True, maskR=True,
                 clip[(new == nodataImg) & (clip == d)] = nodataImg
         else:
             clip[new == nodataImg] = nodataImg
+    
+    image = None
     
     # Export the values
     new_raster.GetRasterBand(1).WriteArray(clip, 0, 0)
@@ -1167,32 +1172,51 @@ def createDecileRaster(images, outFile, mask=None, outModelRaster=None, blockXSi
     '''
     
     # Import all the images to use for estimating the deciles
-    toProcess = [gdal.Open(f) for f in images]
+    sourceImg = [gdal.Open(f) for f in images]
     
     # Get the no data value
-    nodata = toProcess[0].GetRasterBand(1).GetNoDataValue()
+    nodata = sourceImg[0].GetRasterBand(1).GetNoDataValue()
     
-    # Mask if there is a mask
+    #Create an empty copy in memory
+    toProcess = [new_raster_from_base(p, '', 'MEM',
+                                     nodata, gdal.GDT_Float32, bands=1) for
+                 p, f in zip(sourceImg,images)]
+    
+    #Fill it with the values
+    for p, s in zip(toProcess, sourceImg):
+        p.GetRasterBand(1).WriteArray(s.GetRasterBand(1).ReadAsArray())
+        
+        s = None
+    
+    # Import mask if there is one and apply it
     if mask:
-        # I need to mask the rasters first to only have the coffee pixels when I change the resolution
         # Import the mask raster as an array
-        p = gdal.Open(mask)
-        nanMask = p.GetRasterBand(1).ReadAsArray()
-        nodataMask = p.GetRasterBand(1).GetNoDataValue()
-        # Transform all the non zero values to nan
-        nanMask = np.logical_or(
+        n = gdal.Open(mask)
+        nArray = n.GetRasterBand(1).ReadAsArray()
+        nodataMask = n.GetRasterBand(1).GetNoDataValue()
+        
+        # Create the mask
+        nArray = np.logical_or(
             np.logical_or(
-                nanMask == 0, np.isnan(nanMask)),
-                                nanMask == nodataMask)
+                nArray <= 0, np.isnan(nArray)),
+                                nArray > 1)
         
-        # Mask the rasters
-        for p in range(len(toProcess)):
-            pBand = toProcess[p].GetRasterBand(1).ReadAsArray()
-            pBand[nanMask] = nodata
-            toProcess[p].GetRasterBand(1).WriteArray(pBand)
+        '''
+        nArray = np.logical_or(
+            np.logical_or(
+                nArray == 0, np.isnan(nArray)),
+                                nArray == nodataMask)
+        '''
         
-        p = None
-        pBand = None
+        #Apply the mask
+        for p in toProcess:
+            pArray = p.GetRasterBand(1).ReadAsArray()
+            pArray[nArray] = nodata
+            p.GetRasterBand(1).WriteArray(pArray)
+        
+        n = None
+        nArray = None
+        pArray = None
         
     # Change resolution if there is a model
     if outModelRaster:
@@ -1220,7 +1244,7 @@ def createDecileRaster(images, outFile, mask=None, outModelRaster=None, blockXSi
         outModel = gdal.Open(outModelRaster)
         toProcess = [warp_raster(p, outModel, resampleOption='average', outputURI=None, outFormat='MEM') 
                      for p in toProcess]
-    
+        
     # Remove existing raster if any
     if os.path.isfile(outFile):
         os.remove(outFile)

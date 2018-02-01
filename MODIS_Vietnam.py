@@ -27,7 +27,7 @@ import os, re, multiprocessing
 import pathos.multiprocessing as mp
 import MODIS_gedata_toolbox as md  # GEDATA toolbox for MODIS related tools
 import gapfill  # Python implementation of the interpolation algorithm
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 def main():
@@ -38,10 +38,10 @@ def main():
     # Allow parallel computing?
     allowPara = True
     # Number of cores to use?
-    nCores = 12
+    nCores = 3
     
     # Root folder
-    prefixRootSys = '/home/olivierp/jde_coffee'  # 'E:/gedata_current' # '/home/olivierp' 
+    prefixRootSys = '/media/olivier/olivier_ext1/gedata_current/jde_coffee'  # 'E:/gedata_current' # '/home/olivierp' 
     
     # #DIRECTORIES parameters
     # Working directory
@@ -88,7 +88,7 @@ def main():
     # Smooth images
     smooth = False
     # Create baselines
-    createBaselines = True
+    createBaselines = False
     # Rank individual images against baseline images
     ranking = False
     # Average MODIS value in each region
@@ -109,7 +109,7 @@ def main():
     tiles = ['h28v07']  # ['h28v07']
     # Start date for the product download (format YYYY-MM-DD)
     #    If None, will default to date of most recent MODIS file on disk if any, or stop the process
-    startDownload = '2017-11-10'  # '2017-05-26'
+    startDownload = '2016-01-01'  # '2017-05-26'
     # End date for the product download (format YYYY-MM-DD)
     #    If None, defaults to today
     endDownload = None
@@ -118,7 +118,7 @@ def main():
     # Starting date for the files to mosaic
     #    If None, will default to the files that have been just downloaded if 
     #    any.
-    startMosaic = '2017-11-10'
+    startMosaic = '2016-01-01'
     # startMosaic = '2005-01-01'
     # Ending date for the files to mosaic
     #    If None, defaults to today
@@ -130,7 +130,7 @@ def main():
     # Output folder of the images to mask
     outCheck = statesMaskedFolder
     # Start date for the files to check
-    startCheck = '2017-11-10'
+    startCheck = '2016-01-01'
     # End date for the files to check
     endCheck = None
     
@@ -140,9 +140,9 @@ def main():
     # Output folder for the images to fill
     outMissing = statesFilledFolder
     # Year(s) of images to fill
-    yearsMissing = [2017, 2018]
+    yearsMissing = [2016, 2017, 2018]
     # Day(s) of images to fill
-    daysMissing = [[321, 337, 353], [1]]
+    daysMissing = None
     # Suffix to put at the end of the name of the 
     # images after filling
     suffMissing = 'f'
@@ -154,13 +154,13 @@ def main():
     avgWindow = 3
     # Starting date for the files to include as input in the smoothing process
     #    If None, defaults to 1 year before the end smoothing date
-    startSmooth = '2016-11-01'  # '2012-03-01'
+    startSmooth = '2015-01-01'  # '2012-03-01'
     # Ending date for the files to include as input in the smoothing process
     #    If None, defaults to today
     endSmooth = None
     # Start and end dates for the files to save to the disk after smoothing
     #    If None, defaults to 6 months before end smoothing date
-    startSaveS = '2017-06-10'
+    startSaveS = '2016-01-01'
     # startSaveS = '2017-03-01'
     endSaveS = None  # None to save them up to the end smoothing date
     
@@ -181,7 +181,7 @@ def main():
     #    the baselines
     # Starting and ending dates for the images to consider. Included
     #   If None, will default to 60 days before the endRank date
-    startRank = '2017-12-01'
+    startRank = '2016-06-01'
     #   If None, will default to today
     endRank = None
     # Minimum density of coffee to consider 
