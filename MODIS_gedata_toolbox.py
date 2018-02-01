@@ -28,7 +28,8 @@ import functools, dill
 # FUNCTIONS
 
 
-def downloadMODIS(dstFolder, pwd, user, tiles, product, startDownload=None, endDownload=None):
+def downloadMODIS(dstFolder, pwd, user, tiles, product, startDownload=None,
+                  endDownload=None, satellite='terra'):
     '''
     Function to download modis images from server. Returns a list of the names 
         of the newly downloaded files.
@@ -44,7 +45,12 @@ def downloadMODIS(dstFolder, pwd, user, tiles, product, startDownload=None, endD
         or stop the process
     endDownload (str): End date for the product download (format YYYY-MM-DD). 
         If None, defaults to today
+    satellite (str): One of 'terra' or 'aqua'
     '''
+    
+    if not satellite in ['aqua', 'terra']:
+        print('MODIS satellite should be aqua or terra')
+        return false
     
     if not endDownload:
         # Defaults to today's date
@@ -61,7 +67,7 @@ def downloadMODIS(dstFolder, pwd, user, tiles, product, startDownload=None, endD
     # Dates of these files
     if thereHdf:
         datesHdf = [re.search('A([0-9]{7})', f).group(1) for f in thereHdf]
-        datesHdfD = [datetime.strptime('0101' + d[0:4], "%d%m%Y").date() + timedelta(days=int(d[4:])) 
+        datesHdf = [datetime.strptime('0101' + d[0:4], "%d%m%Y").date() + timedelta(days=int(d[4:])) 
                      for d in datesHdf]
         # datesTif = [re.search('_([0-9]{4}-[0-9]{2}-[0-9]{2})_', f).group(1) for f in thereTif]
         # datesTif = [datetime.strptime(d, "%Y-%m-%d").date() for d in datesTif]
@@ -75,10 +81,10 @@ def downloadMODIS(dstFolder, pwd, user, tiles, product, startDownload=None, endD
     
     # Get latest date of the file on disk
     if datesHdf and not startDownload:
-        startDownload = max(datesHdfD)
+        startDownload = max(datesHdf)
         startDownload = min(startDownload, endDownload - timedelta(days=120))
         
-    for f, d in zip(thereHdf, datesHdfD):
+    for f, d in zip(thereHdf, datesHdf):
         if d >= startDownload and d <= endDownload:
             try:
                 os.remove(os.path.join(dstFolder, f))
@@ -90,10 +96,15 @@ def downloadMODIS(dstFolder, pwd, user, tiles, product, startDownload=None, endD
         
     endDownload = endDownload.strftime('%Y-%m-%d')
     
+    if satellite == 'terra':
+        pathData = 'MOLT'
+    else:
+        pathData = 'MOLA'
+    
     # Download 
     down = pm.downmodis.downModis(destinationFolder=dstFolder, password=pwd,
                                   user=user, url="https://e4ftl01.cr.usgs.gov",
-                                  tiles=tiles, path='MOLT', product=product,
+                                  tiles=tiles, path=pathData, product=product,
                                   today=startDownload, enddate=endDownload,
                                   jpg=False, debug=False, timeout=30,
                                   checkgdal=True)
@@ -1177,12 +1188,12 @@ def createDecileRaster(images, outFile, mask=None, outModelRaster=None, blockXSi
     # Get the no data value
     nodata = sourceImg[0].GetRasterBand(1).GetNoDataValue()
     
-    #Create an empty copy in memory
+    # Create an empty copy in memory
     toProcess = [new_raster_from_base(p, '', 'MEM',
                                      nodata, gdal.GDT_Float32, bands=1) for
-                 p, f in zip(sourceImg,images)]
+                 p, f in zip(sourceImg, images)]
     
-    #Fill it with the values
+    # Fill it with the values
     for p, s in zip(toProcess, sourceImg):
         p.GetRasterBand(1).WriteArray(s.GetRasterBand(1).ReadAsArray())
         
@@ -1208,7 +1219,7 @@ def createDecileRaster(images, outFile, mask=None, outModelRaster=None, blockXSi
                                 nArray == nodataMask)
         '''
         
-        #Apply the mask
+        # Apply the mask
         for p in toProcess:
             pArray = p.GetRasterBand(1).ReadAsArray()
             pArray[nArray] = nodata
