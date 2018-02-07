@@ -20,6 +20,8 @@ from osgeo import gdal, gdalconst, ogr
 import numpy as np
 from csv import DictWriter
 import functools, dill
+#import warnings
+#warnings.filterwarnings('error')
 
 #####################################################################################################################
 #####################################################################################################################
@@ -669,7 +671,7 @@ def smoothSeries(inRasters, toSave, outFolder, regWindow, avgWindow,
                 blocks = smoothingSavitzky(blocks, nodata)
             
             # Return to regular ndvi values between -1 and 1
-            blocks = np.divide(blocks, 10000.)
+            blocks[blocks!=nodata] = np.divide(blocks[blocks!=nodata], 10000.)
             
             # Change the values in the output raster
             blocks = np.dsplit(blocks, len(toProcess))
@@ -688,7 +690,7 @@ def smoothSeries(inRasters, toSave, outFolder, regWindow, avgWindow,
         p = None
 
 
-def smoothingSwets(block, regWindow, avgWindow, nodata=None):
+def smoothingSwets(block, regWindow, avgWindow, nodata=None, minLim=None, maxLim=None):
     '''
     Function to do the temporal smoothing of a 3D numpy array.
     The function will loop through all the columns in the first two dimensions, 
@@ -712,6 +714,10 @@ def smoothingSwets(block, regWindow, avgWindow, nodata=None):
     nodata (int): value for the no data in the input array if any. If None, 
         assumed to be np.nan. The output array will be returned with np.nan as 
         the no data value if nodata is not provided.
+    minLim (num): minimum value that the pixel can take. 
+        The output will be limited to that value
+    maxLim (num): maximum value that the pixel can take. 
+        The output will be limited to that value
     '''
     
     extent = block.shape
@@ -720,9 +726,12 @@ def smoothingSwets(block, regWindow, avgWindow, nodata=None):
             pixel = np.copy(block[X, Y, :])
             
             # Check if entire pixel vector is nan, just return it
-            if ((nodata and np.all(pixel == nodata)) or 
-                np.all(np.isnan(pixel))):
+            if (nodata and np.all(pixel == nodata)):
                 pixel.fill(nodata)
+                block[X, Y, :] = pixel
+                continue
+            elif np.all(np.isnan(pixel)):
+                pixel.fill(np.nan)
                 block[X, Y, :] = pixel
                 continue
             
@@ -876,10 +885,19 @@ def smoothingSwets(block, regWindow, avgWindow, nodata=None):
             smoothed = np.asarray(smoothed)
             smoothed = np.reshape(smoothed, originShape)
             
-            smoothed[np.isnan(smoothed)] = nodata
+            if minLim:
+                smoothed[~np.isnan(smoothed) & smoothed < minLim] = minLim
+            if maxLim:
+                smoothed[~np.isnan(smoothed) & smoothed > maxLim] = maxLim
+            
+            if nodata:
+                smoothed[np.isnan(smoothed)] = nodata
             
             # Replace the original missing pixels back
-            smoothed[miss] = nodata
+            if nodata:
+                smoothed[miss] = nodata
+            else:
+                smoothed[miss] = np.nan
             
             block[X, Y, :] = smoothed
     
@@ -915,8 +933,11 @@ def smoothingSavitzky(block, nodata=None):
             pixel = np.copy(block[X, Y, :])
             
             # Check if entire pixel vector is nan, just return it
-            if ((nodata and np.all(pixel == nodata)) or 
-                np.all(np.isnan(pixel))):
+            if (nodata and np.all(pixel == nodata)):
+                pixel.fill(nodata)
+                block[X, Y, :] = pixel
+                continue
+            elif np.all(np.isnan(pixel)):
                 pixel.fill(np.nan)
                 block[X, Y, :] = pixel
                 continue
@@ -965,7 +986,8 @@ def smoothingSavitzky(block, nodata=None):
             # Reshape
             pixel = np.reshape(pixel, originShape)
             
-            pixel[np.isnan(pixel)] = nodata
+            if nodata:
+                smoothed[np.isnan(smoothed)] = nodata
             
             # Replace the smoothed pixel in the block
             block[X, Y, :] = pixel
@@ -1861,7 +1883,7 @@ def avgRegionRaster(images, datesImg, weightsRaster=None, weightField=None,
         
         sumNdvi = []
         sumWeights = []
-        
+        i = 0
         for xStep in range(xBlocks):
             for yStep in range(yBlocks):
                 
@@ -1904,9 +1926,10 @@ def avgRegionRaster(images, datesImg, weightsRaster=None, weightField=None,
                 # Estimate the weighted sum for each pixel
                 sumNdvi.append(np.sum(np.multiply(blockBase, blockWeight)))
                 sumWeights.append(np.sum(blockWeight))
-        
+                
         # Combine for the entire image
         sumNdvi = np.sum(sumNdvi) / np.sum(sumWeights)
+            
         
         # Add to the output dictionary along with the date
         average[date.strftime('%Y-%m-%d')] = sumNdvi

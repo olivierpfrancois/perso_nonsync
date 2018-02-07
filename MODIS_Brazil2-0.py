@@ -55,7 +55,7 @@ def main():
     # #REGIONS parameters
     # Regions to process inputs    !!!!SHOULD BE IN EPSG 4326 PROJECTION
     # Names of the regions (also folders names) 
-    states = ["CER", "CHA", "CO", "ES", "MO", "SDM", "SP", "ZM"]
+    states = ["SDM", "SP", "ZM"] #["CER", "CHA", "CO", "ES", "MO", "SDM", "SP", "ZM"]
     # Varieties in each case
     varieties = [['arabica'], ['arabica'], ['arabica'], ['arabica', 'robusta'], 
                  ['arabica'], ['arabica'], ['arabica'], ['arabica', 'robusta']]
@@ -87,13 +87,13 @@ def main():
     # Fill missing values and mask by exact AOI 
     fillMissing = True
     # Smooth images
-    smooth = True
+    smooth = False
     # Create baselines
     createBaselines = False
     # Rank individual images against baseline images
-    ranking = True
+    ranking = False
     #Average MODIS value in each region
-    avgValue = True
+    avgValue = False
     
     
     
@@ -108,7 +108,7 @@ def main():
     tiles = ['h13v10', 'h13v11', 'h14v10', 'h14v11']  # ['h28v07']
     # Start date for the product download (format YYYY-MM-DD)
     #    If None, will default to date of most recent MODIS file on disk if any, or stop the process
-    startDownload = None # '2017-05-26'
+    startDownload = '2017-01-15'
     # End date for the product download (format YYYY-MM-DD)
     #    If None, defaults to today
     endDownload = None
@@ -117,7 +117,7 @@ def main():
     # Starting date for the files to mosaic
     #    If None, will default to the files that have been just downloaded if 
     #    any.
-    startMosaic = '2017-11-01'
+    startMosaic = '2017-01-15'
     # startMosaic = '2005-01-01'
     # Ending date for the files to mosaic
     #    If None, defaults to today
@@ -129,7 +129,7 @@ def main():
     # Output folder of the images to mask
     outCheck = statesMaskedFolder
     # Start date for the files to check
-    startCheck = '2017-11-01'
+    startCheck = '2017-01-15'
     # End date for the files to check
     endCheck = None
     
@@ -139,9 +139,9 @@ def main():
     # Output folder for the images to fill
     outMissing = statesFilledFolder
     # Year(s) of images to fill
-    yearsMissing = [2017]
+    yearsMissing = [2017,2018]
     # Day(s) of images to fill
-    daysMissing = [[305, 321]]
+    daysMissing = [[305,321,337,353],[1,17]]
     # Suffix to put at the end of the name of the 
     # images after filling
     suffMissing = 'f'
@@ -153,13 +153,13 @@ def main():
     avgWindow = 3
     # Starting date for the files to include as input in the smoothing process
     #    If None, defaults to 1 year before the end smoothing date
-    startSmooth = '2016-11-01' #'2012-03-01'
+    startSmooth = '2016-04-15' #'2012-03-01'
     # Ending date for the files to include as input in the smoothing process
     #    If None, defaults to today
     endSmooth = None
     # Start and end dates for the files to save to the disk after smoothing
     #    If None, defaults to 6 months before end smoothing date
-    startSaveS = '2017-06-10'
+    startSaveS = '2017-06-01'
     # startSaveS = '2017-03-01'
     endSaveS = None  # None to save them up to the end smoothing date
     
@@ -198,7 +198,7 @@ def main():
     #    the baselines
     # Starting and ending dates for the images to consider. Included
     #   If None, will default to 60 days before the endRank date
-    startRank = '2017-12-01'
+    startRank = '2017-11-01'
     #   If None, will default to today
     endRank = None
     # Minimum density of coffee to consider 
@@ -279,6 +279,8 @@ def main():
                                   endMosaic=endMosaic)
     
     if checkQuality:
+        print('Starting quality check')
+        
         if not endCheck:
             endCheck= datetime.now()
             endCheck = endCheck.date()
@@ -289,6 +291,8 @@ def main():
             startCheck = datetime.strptime(startCheck, '%Y-%m-%d').date()
         
         for s, b in zip(states, statesBoundFiles):
+            print('   Starting region '+s)
+            
             # Import all the raw ndvi modis images on disk
             allNDVI = [os.path.join(dst, s, inCheck, f) for 
                         f in os.listdir(os.path.join(dst, s, inCheck)) 
@@ -370,8 +374,11 @@ def main():
                                         nodataOut=32767)
     
     if fillMissing:
+        print('Starting interpolation of missing values')
         
         for s, b in zip(states, statesBoundFiles):
+            print('   Starting region '+s)
+            
             inputRasters = [os.path.join(dst, s, inMissing, f) for 
                             f in os.listdir(os.path.join(dst, s, inMissing)) 
                             if f.endswith('.tif')]

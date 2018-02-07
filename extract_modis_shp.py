@@ -24,10 +24,10 @@ import image_proc_functions as img
 def main():
     
     #Root directory for the modis data
-    root = '/media/olivier/olivier_ext1/gedata_current/jde_coffee/MODIS/collection6' #'E:/gedata_current/jde_coffee/MODIS/collection6'
+    root = '/media/olivier/olivier_ext1/gedata_current/jde_coffee/MODIS/collection6/Brazil' #'E:/gedata_current/jde_coffee/MODIS/collection6'
     
-    #Folder in root to use for temporary files (should be empty)
-    tempDir = 'Temp'
+    #Full pqth to folder to use for temporary files (should be empty)
+    tempDir = '/media/olivier/olivier_ext1/gedata_current/jde_coffee/Temp'
     
     #Destination directory of the extracted modis information
     dst = root
@@ -42,9 +42,9 @@ def main():
     statesSmoothFolder = 'smooth_data'
     
     #Address of the shapefile with the polygons in which to extract
-    shp = '/media/olivier/olivier_ext1/gedata_current/jde_coffee/data/brazil_admin_boundaries/br_municipalities.shp'
+    shp = '/media/olivier/olivier_ext1/gedata_current/jde_coffee/data/Brazil/brazil_admin_boundaries/microregions.shp' # br_municipalities.shp
     #Name of the field with the unique ids of the polygons
-    idAttribute = 'CD_GEOCMU'
+    idAttribute = 'MICRO_REGI' #'CD_GEOCMU'
     
     #Start date for extraction
     startd = '2006-01-01'
@@ -52,13 +52,13 @@ def main():
     endd = '2018-01-01'
     
     masks = [['masks/CER_densities_arabica_from_classifications_250m.tif'],
-                    ['masks/CHA_densities_arabica_from_classifications_250m.tif'],
-                    ['masks/CO_densities_arabica_from_classifications_250m.tif'],
-                    ['masks/ES_densities_arabica_from_classifications_250m.tif','masks/ES_densities_robusta_from_classifications_250m.tif'],
-                    ['masks/MO_densities_arabica_from_classifications_250m.tif'],
-                    ['masks/SDM_densities_arabica_from_classifications_250m.tif'],
-                    ['masks/SP_densities_arabica_from_classifications_250m.tif'],
-                    ['masks/ZM_densities_arabica_from_classifications_250m.tif','masks/ZM_densities_robusta_from_classifications_250m.tif']]
+             ['masks/CHA_densities_arabica_from_classifications_250m.tif'],
+             ['masks/CO_densities_arabica_from_classifications_250m.tif'],
+             ['masks/ES_densities_arabica_from_classifications_250m.tif','masks/ES_densities_robusta_from_classifications_250m.tif'],
+             ['masks/MO_densities_arabica_from_classifications_250m.tif'],
+             ['masks/SDM_densities_arabica_from_classifications_250m.tif'],
+             ['masks/SP_densities_arabica_from_classifications_250m.tif'],
+             ['masks/ZM_densities_arabica_from_classifications_250m.tif','masks/ZM_densities_robusta_from_classifications_250m.tif']]
     
     exportFormat = 'long'
     
@@ -118,7 +118,7 @@ def extractModis(root, regions, varieties, regionsIn,
         
         #create output datasource
         outdriver = ogr.GetDriverByName('ESRI Shapefile')
-        srcOut = outdriver.CreateDataSource(os.path.join(root,tempDir,'temp.shp'))
+        srcOut = outdriver.CreateDataSource(os.path.join(tempDir,'temp.shp'))
         #Create a new layer
         lyrOut = srcOut.CreateLayer("layer 1", srs=prj2, geom_type=inVecLayer.GetGeomType())
         
@@ -194,22 +194,22 @@ def extractModis(root, regions, varieties, regionsIn,
         baseImg = gdal.Open(os.path.join(root,regions[r],regionsIn,onDisk[0]))
         
         #Get the corner latitude and longitude for the raster
-        width = baseImg.RasterXSize
-        height = baseImg.RasterYSize
+        cols = baseImg.RasterXSize # width
+        rows = baseImg.RasterYSize # height
         gt = baseImg.GetGeoTransform()
         minLonR = gt[0]
-        minLatR = gt[3] + width*gt[4] + height*gt[5] 
-        maxLonR = gt[0] + width*gt[1] + height*gt[2]
+        minLatR = gt[3] + cols*gt[4] + rows*gt[5] 
+        maxLonR = gt[0] + cols*gt[1] + rows*gt[2]
         maxLatR = gt[3]
         
         #Close the raster
         baseImg = None
         
         #Crop the shapefile by the extent of the raster
-        inShp = root+'/'+tempDir+'/temp.shp'
-        outShp = root+'/'+tempDir+'/temp_crop.shp'
+        inShp = tempDir+'/temp.shp'
+        outShp = tempDir+'/temp_crop.shp'
         #Call ogr2ogr using the os system command
-        cmd = 'ogr2ogr -f "ESRI Shapefile" %s %s -clipsrc %d %d %d %d' % (outShp, inShp, minLonR, minLatR, maxLonR, maxLatR)
+        cmd = 'ogr2ogr -f "ESRI Shapefile" %s %s -clipsrc %f %f %f %f -overwrite' % (outShp, inShp, minLonR, minLatR, maxLonR, maxLatR)
         os.system(cmd)
         
         
@@ -217,7 +217,7 @@ def extractModis(root, regions, varieties, regionsIn,
         #Import the mask
         weightsRaster = gdal.Open(root+'/'+regions[r]+'/'+masks[r][0])
         #Create an empty copy for storing the temporary weighted image
-        weighted = new_raster_from_base(weightsRaster, root+'/'+tempDir+'/temp.tif', 'GTiff', 0., gdal.GDT_Float32, bands=1)
+        weighted = new_raster_from_base(weightsRaster, tempDir+'/temp.tif', 'GTiff', 0., gdal.GDT_Float32, bands=1)
         #Import coffee weights band as array
         weightsBand = weightsRaster.GetRasterBand(1)
         weightsArray = weightsBand.ReadAsArray()
@@ -231,7 +231,7 @@ def extractModis(root, regions, varieties, regionsIn,
         weighted.FlushCache()
         weighted = None
         #Compute the count of pixels for each polygon of the cropped municipalities
-        stat = img.raster_stats(regionsFileName=os.path.join(root,tempDir,'temp_crop.shp'), rasterFileName=root+'/'+tempDir+'/temp.tif',  
+        stat = img.raster_stats(regionsFileName=os.path.join(tempDir,'temp_crop.shp'), rasterFileName=tempDir+'/temp.tif',  
                                          polIdFieldName=attr, statistics=['sum'], outTxt=None, addShp=False, addSuffix='', 
                                          numOutDecs=2, alltouch=True)
         if not stat:
@@ -245,8 +245,9 @@ def extractModis(root, regions, varieties, regionsIn,
             else:
                 totPixels[str(polyid)] = totPixels[str(polyid)] + stat[polyid]['sum']
         #Remove existing temporary raster if any
+        
         try:
-            os.remove(os.path.join(root,tempDir,'temp.tif'))
+            os.remove(os.path.join(tempDir,'temp.tif'))
         except OSError:
             pass
         
@@ -263,7 +264,7 @@ def extractModis(root, regions, varieties, regionsIn,
             #Import the mask
             weightsRaster = gdal.Open(root+'/'+regions[r]+'/'+masks[r][v])
             #Create an empty copy for storing the temporary weighted image
-            weighted = new_raster_from_base(weightsRaster, root+'/'+tempDir+'/temp.tif', 'GTiff', 0., gdal.GDT_Float32, bands=1)
+            weighted = new_raster_from_base(weightsRaster, tempDir+'/temp.tif', 'GTiff', 0., gdal.GDT_Float32, bands=1)
             #Import coffee weights band as array
             weightsBand = weightsRaster.GetRasterBand(1)
             weightsArray = weightsBand.ReadAsArray()
@@ -287,10 +288,10 @@ def extractModis(root, regions, varieties, regionsIn,
             '''
             if regions[r] == 'ES' and varieties[r][v] == 'robusta':
                 try:
-                    os.remove(os.path.join(root,tempDir,'tempES.tif'))
+                    os.remove(os.path.join(tempDir,'tempES.tif'))
                 except OSError:
                     pass
-                weighted = new_raster_from_base(weightsRaster, root+'/'+tempDir+'/tempES.tif', 'GTiff', 0., gdal.GDT_Float32, bands=1)
+                weighted = new_raster_from_base(weightsRaster, tempDir+'/tempES.tif', 'GTiff', 0., gdal.GDT_Float32, bands=1)
                 #Export to temporary raster
                 weighted.GetRasterBand(1).WriteArray(weightsArray)
                 #Close the temporary raster
@@ -299,7 +300,7 @@ def extractModis(root, regions, varieties, regionsIn,
             ''' 
             
             #Compute the count of pixels for each polygon of the cropped municipalities
-            stat = img.raster_stats(regionsFileName=os.path.join(root,tempDir,'temp_crop.shp'), rasterFileName=root+'/'+tempDir+'/temp.tif',  
+            stat = img.raster_stats(regionsFileName=os.path.join(tempDir,'temp_crop.shp'), rasterFileName=tempDir+'/temp.tif',  
                                              polIdFieldName=attr, statistics=['sum'], outTxt=None, addShp=False, addSuffix='', 
                                              numOutDecs=2, alltouch=True)
             if not stat:
@@ -317,17 +318,16 @@ def extractModis(root, regions, varieties, regionsIn,
                     coffeeShare[varieties[r][v]][str(polyid)] = coffeeShare[varieties[r][v]][str(polyid)] + stat[polyid]['sum']
             #Remove existing temporary raster if any
             try:
-                os.remove(os.path.join(root,tempDir,'temp.tif'))
+                os.remove(os.path.join(tempDir,'temp.tif'))
             except OSError:
                 pass
             weightsRaster = None
-            
             
             ###Extract the sum of coffee weights per cropped municipality
             #Import the mask
             weightsRaster = gdal.Open(root+'/'+regions[r]+'/'+masks[r][v])
             #Create an empty copy for storing the temporary weighted image
-            weighted = new_raster_from_base(weightsRaster, root+'/'+tempDir+'/temp.tif', 'GTiff', 0, gdal.GDT_Float32, bands=1)
+            weighted = new_raster_from_base(weightsRaster, tempDir+'/temp.tif', 'GTiff', 0, gdal.GDT_Float32, bands=1)
             #Import coffee weights band as array
             weightsBand = weightsRaster.GetRasterBand(1)
             weightsArray = weightsBand.ReadAsArray()
@@ -346,7 +346,7 @@ def extractModis(root, regions, varieties, regionsIn,
             weighted.FlushCache()
             weighted = None
             #Compute the sum for each polygon of the coffee
-            stat = img.raster_stats(regionsFileName=os.path.join(root,tempDir,'temp_crop.shp'), rasterFileName=root+'/'+tempDir+'/temp.tif',  
+            stat = img.raster_stats(regionsFileName=os.path.join(tempDir,'temp_crop.shp'), rasterFileName=tempDir+'/temp.tif',  
                                              polIdFieldName=attr, statistics=['sum'], outTxt=None, addShp=False, addSuffix='', 
                                              numOutDecs=2, alltouch=True)
             if not stat:
@@ -372,12 +372,12 @@ def extractModis(root, regions, varieties, regionsIn,
                 
                 #Remove existing temporary raster if any
                 try:
-                    os.remove(os.path.join(root,tempDir,'temp.tif'))
+                    os.remove(os.path.join(tempDir,'temp.tif'))
                 except OSError:
                     pass
                 
                 #Create an empty copy for storing the temporary weighted image
-                weighted = new_raster_from_base(baseImg, root+'/'+tempDir+'/temp.tif', 'GTiff', np.nan, gdal.GDT_Float32, bands=1)
+                weighted = new_raster_from_base(baseImg, tempDir+'/temp.tif', 'GTiff', np.nan, gdal.GDT_Float32, bands=1)
                 
                 #Import image band as array
                 imgBand = baseImg.GetRasterBand(1)
@@ -428,7 +428,7 @@ def extractModis(root, regions, varieties, regionsIn,
                 weighted = None
                 weightsReproj = None
                 
-                stat = img.raster_stats(regionsFileName=os.path.join(root,tempDir,'temp_crop.shp'), rasterFileName=root+'/'+tempDir+'/temp.tif',  
+                stat = img.raster_stats(regionsFileName=os.path.join(tempDir,'temp_crop.shp'), rasterFileName=tempDir+'/temp.tif',  
                                         polIdFieldName=attr, statistics=['sum'], outTxt=None, addShp=False, addSuffix='', 
                                         numOutDecs=2, alltouch=True)
                 
@@ -451,19 +451,19 @@ def extractModis(root, regions, varieties, regionsIn,
                     else:
                         imgStats[varieties[r][v]][date.strftime('%Y-%m-%d')][str(polyid)] = (imgStats[varieties[r][v]][date.strftime('%Y-%m-%d')][str(polyid)] + 
                                                                                              stat[polyid]['sum'])
-                
+            
             #Remove the temporary file
             try:
-                os.remove(os.path.join(root,tempDir,'temp.tif'))
+                os.remove(os.path.join(tempDir,'temp.tif'))
             except OSError:
                 pass
             
             #Close the mask 
             weightsRaster = None
-            
+        
         #Remove the temporary shapefile
         try:
-            driver.DeleteDataSource(os.path.join(root,tempDir,'temp_crop.shp'))
+            driver.DeleteDataSource(os.path.join(tempDir,'temp_crop.shp'))
         except OSError:
             pass
         
@@ -474,14 +474,16 @@ def extractModis(root, regions, varieties, regionsIn,
                 for polyid in imgStats[v][date].keys():
                     
                     if not polyid == 'date':
-                        if not polyid in coffeeShare[v].keys() or coffeeShare[v][polyid]/totPixels[polyid] < 0.1:
+                        # Remove the region/municipality if the share of pixels with some coffee is 
+                        # less than 5% of the total pixels covered by MODIS
+                        if not polyid in coffeeShare[v].keys() or coffeeShare[v][polyid]/totPixels[polyid] < 0.05:
                             del imgStats[v][date][polyid]
                             continue
                         
                         imgStats[v][date][polyid] = imgStats[v][date][polyid]/coffeeWeights[v][polyid]
-        
+            
             #Export all the dates and polygon ids to a text file
-            outNm = 'Weighted_avgndvi_permunicipality_'+v+'_'+startExtract.strftime('%Y-%m-%d')+'_'+endExtract.strftime('%Y-%m-%d')+'.txt'
+            outNm = 'Weighted_avgndvi_permicroregion_'+v+'_'+startExtract.strftime('%Y-%m-%d')+'_'+endExtract.strftime('%Y-%m-%d')+'.txt'
             
             if exportFormat == 'wide':
                 #order the output by polygon id in a list
@@ -536,7 +538,7 @@ def extractModis(root, regions, varieties, regionsIn,
         
     #Remove the temporary shapefile
     try:
-        driver.DeleteDataSource(os.path.join(root,tempDir,'temp.shp'))
+        driver.DeleteDataSource(os.path.join(tempDir,'temp.shp'))
     except OSError:
         pass    
         

@@ -41,10 +41,10 @@ def main():
     nCores = 5
     
     # Satellite
-    satelliteModis = 'aqua'  # 'terra'
+    satelliteModis = 'terra'  # 'terra' # 'aqua'
     
     # Root folder
-    prefixRootSys = '/home/olivierp/jde_coffee'  # 'E:/gedata_current' # '/media/olivier/olivier_ext1/gedata_current/jde_coffee'   
+    prefixRootSys = '/media/olivier/olivier_ext1/gedata_current/jde_coffee' # '/home/olivierp/jde_coffee'  # 'E:/gedata_current'   
     
     # #DIRECTORIES parameters
     # Working directory
@@ -91,11 +91,11 @@ def main():
     # Smooth images
     smooth = True
     # Create baselines
-    createBaselines = False
+    createBaselines = True
     # Rank individual images against baseline images
-    ranking = False
+    ranking = True
     # Average MODIS value in each region
-    avgValue = False
+    avgValue = True
     
     # Get the percentage of missing values for each pixel across history
     checkPercMissing = False
@@ -115,7 +115,7 @@ def main():
     tiles = ['h28v07']  # ['h28v07']
     # Start date for the product download (format YYYY-MM-DD)
     #    If None, will default to date of most recent MODIS file on disk if any, or stop the process
-    startDownload = '2005-01-01'  # '2017-05-26'
+    startDownload = '2018-01-01'  # '2017-05-26'
     # End date for the product download (format YYYY-MM-DD)
     #    If None, defaults to today
     endDownload = None
@@ -124,7 +124,7 @@ def main():
     # Starting date for the files to mosaic
     #    If None, will default to the files that have been just downloaded if 
     #    any.
-    startMosaic = '2005-01-01'
+    startMosaic = '2018-01-01'
     # startMosaic = '2005-01-01'
     # Ending date for the files to mosaic
     #    If None, defaults to today
@@ -136,7 +136,7 @@ def main():
     # Output folder of the images to mask
     outCheck = statesMaskedFolder
     # Start date for the files to check
-    startCheck = '2005-01-01'
+    startCheck = '2018-01-01'
     # End date for the files to check
     endCheck = None
     
@@ -146,9 +146,9 @@ def main():
     # Output folder for the images to fill
     outMissing = statesFilledFolder
     # Year(s) of images to fill
-    yearsMissing = range(2005, 2019)
+    yearsMissing = [2017,2018]
     # Day(s) of images to fill
-    daysMissing = None
+    daysMissing = [[1,17,353],[1,17]]
     # Suffix to put at the end of the name of the 
     # images after filling
     suffMissing = 'f'
@@ -160,13 +160,13 @@ def main():
     avgWindow = 3
     # Starting date for the files to include as input in the smoothing process
     #    If None, defaults to 1 year before the end smoothing date
-    startSmooth = '2005-01-01'  # '2012-03-01'
+    startSmooth = '2016-01-17'  # '2012-03-01'
     # Ending date for the files to include as input in the smoothing process
     #    If None, defaults to today
     endSmooth = None
     # Start and end dates for the files to save to the disk after smoothing
     #    If None, defaults to 6 months before end smoothing date
-    startSaveS = '2006-01-01'
+    startSaveS = '2016-08-01'
     # startSaveS = '2017-03-01'
     endSaveS = None  # None to save them up to the end smoothing date
     
@@ -205,7 +205,7 @@ def main():
     #Grid/Raster to use for the averaging --> FULL PATH!!!!!!!
     avgWeights = [[dst + '/LD/masks/LD_densities_coffee_from_classifications_250m.tif']]
     # Name of the field with the density information if the masks for averaging 
-    #    are shapefiles 
+    #    are shapefiles
     weightField = None
     
     #####################################################################################################################
@@ -251,6 +251,8 @@ def main():
                                   endMosaic=endMosaic)
     
     if checkQuality:
+        print('Starting quality check')
+        
         if not endCheck:
             endCheck = datetime.now()
             endCheck = endCheck.date()
@@ -261,6 +263,8 @@ def main():
             startCheck = datetime.strptime(startCheck, '%Y-%m-%d').date()
         
         for s, b in zip(states, statesBoundFiles):
+            print('   Starting region '+s)
+            
             # Import all the raw ndvi modis images on disk
             allNDVI = [os.path.join(dst, s, inCheck, f) for 
                         f in os.listdir(os.path.join(dst, s, inCheck)) 
@@ -342,8 +346,11 @@ def main():
                                         nodataOut=32767)
     
     if fillMissing:
+        print('Starting interpolation of missing values')
         
         for s, b in zip(states, statesBoundFiles):
+            print('   Starting region '+s)
+            
             inputRasters = [os.path.join(dst, s, inMissing, f) for 
                             f in os.listdir(os.path.join(dst, s, inMissing)) 
                             if f.endswith('.tif')]
