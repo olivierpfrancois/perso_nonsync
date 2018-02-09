@@ -1575,7 +1575,7 @@ def estimateRankRaster(image, deciles, outFile, densityMask=None,
                     blockSmooth[blockMask] = nodata
                     for b in blockBase:
                         b[blockMask] = nodata
-                
+                    
                 # Bring the blocks together into one single array
                 blockBase = np.dstack(blockBase)
                 
@@ -1628,7 +1628,7 @@ def estimateRank(block, ref, nodata):
             refPixel[np.logical_or(refPixel == nodata, np.isinf(refPixel))] = np.nan
             testPixel[np.logical_or(testPixel == nodata, np.isinf(testPixel))] = np.nan
             
-            # return nan if the test pixel is nan or the ref pixel is nan
+            # return no data if the test pixel is nan or the ref pixel is nan
             if np.isnan(testPixel) or np.all(np.isnan(refPixel)):
                 ranking[X, Y] = nodata
                 continue
@@ -1883,7 +1883,7 @@ def avgRegionRaster(images, datesImg, weightsRaster=None, weightField=None,
         
         sumNdvi = []
         sumWeights = []
-        i = 0
+        
         for xStep in range(xBlocks):
             for yStep in range(yBlocks):
                 
@@ -1938,6 +1938,140 @@ def avgRegionRaster(images, datesImg, weightsRaster=None, weightField=None,
         baseImg = None
     
     return(average)
+
+
+def computeQualityIndexNdvi(images, datesImg, missingValue=None, 
+                            weightsRaster=None, weightField=None,
+                    alltouch=False, blockXSize=256, blockYSize=256):
+    
+    if weightsRaster:
+        # Get a base image as a reference for format
+        baseImg = gdal.Open(images[0])
+        
+        # Rasterize the gridded weights if needed or simply import it
+        if weightsRaster.endswith('.shp'):
+            if not weightField:
+                print('The name of the field with the densities needs to be specified to average')
+                return(False)
+            
+            # Import the vector layer
+            # Open the shapefile
+            driver = ogr.GetDriverByName('ESRI Shapefile')
+            dataSource = driver.Open(weightsRaster, 0)  # 0 means read-only. 1 means writeable.
+            
+            # Create layer
+            inVecLayer = dataSource.GetLayer(0)
+            
+            # Prepare an empty raster to rasterize the shapefile
+            weightsRaster = new_raster_from_base(baseImg, 'temp', 'MEM', -1, gdal.GDT_Float32) 
+            
+            # Transform alltouch
+            if alltouch:
+                alltouch = 'TRUE'
+            else:
+                alltouch = 'FALSE'
+            
+            # Rasterize the vector layer:
+            gdal.RasterizeLayer(weightsRaster, [1], inVecLayer,
+                                options=['ALL_TOUCHED=' + alltouch, 'ATTRIBUTE=' + weightField])
+            
+            inVecLayer = None
+            
+        elif weightsRaster.endswith(('.tif', '.TIF')):
+            weightsRaster = gdal.Open(weightsRaster)
+            
+            # Change the resolution of the raster to match the images if needed
+            
+            geoSmooth = weightsRaster.GetGeoTransform()
+            geoBase = baseImg.GetGeoTransform()
+            reproject = [1 for a, b in zip(geoSmooth, geoBase) if not a == b]
+            if reproject:
+                weightsRaster = warp_raster(weightsRaster, baseImg, resampleOption='nearest', outputURI=None, outFormat='MEM')
+        
+        baseImg = None
+        nodataWeights = weightsRaster.GetRasterBand(1).GetNoDataValue()
+    
+    # Prepare an empty dictionary to hold the results
+    quality = {}
+    
+    # Loop through the images to compute the average for each
+    for img, date in zip(images, datesImg):
+        
+        # Import the image
+        baseImg = gdal.Open(img)
+        
+        # Loop through the blocks to compute the average for each
+        
+        # Get the size of the rasters to identify the limits of the blocks to loop through
+        band = baseImg.GetRasterBand(1)
+        # Get the no data value
+        nodataBase = band.GetNoDataValue()
+        
+        # Update the value to consider as missing if not provided
+        if not missingValue:
+            missingValue = nodataBase
+            
+        # Get the size of the raster
+        xsize = band.XSize
+        ysize = band.YSize
+        # Get the number of blocks in x and y directions based on the block size
+        xBlocks = int(round(xsize / blockXSize)) + 1
+        yBlocks = int(round(ysize / blockYSize)) + 1
+        band = None
+        
+        sumWeights = []
+        sumAll = []
+        
+        for xStep in range(xBlocks):
+            for yStep in range(yBlocks):
+                
+                # Read the block from the image
+                blockBase = readRasterBlock(baseImg,
+                                            xStep * blockXSize, yStep * blockYSize,
+                                            blockXSize, blockYSize)
+                
+                # Recast the type to be sure
+                blockBase = blockBase.astype(np.float32)
+                
+                # Create a mask of the block to only keep 
+                # the missing value
+                blockBase = blockBase==missingValue
+                
+                if weightsRaster:
+                    # Read the block from the weights
+                    blockWeight = readRasterBlock(weightsRaster,
+                                                  xStep * blockXSize, yStep * blockYSize,
+                                                  blockXSize, blockYSize)
+                    
+                    # Recast the type to be sure
+                    blockWeight = blockWeight.astype(np.float32)
+                
+                    # Replace the no data values by 0
+                    blockWeight[np.logical_or(
+                        np.logical_or(blockWeight == nodataWeights, np.isnan(blockWeight)),
+                        np.logical_or(blockWeight > 1, blockWeight < 0))] = 0.
+                    
+                    # Set the no data values in the image as zero weight
+                    blockWeight[blockBase == 0.] = 0.
+                    
+                else:
+                    # Create an array of same size as block with only ones
+                    blockWeight = np.ones(blockBase.shape)
+                
+                # Estimate the weighted sum for each pixel
+                sumWeights.append(np.sum(np.multiply(blockBase, blockWeight)))
+                sumAll.append(np.sum(blockWeight))
+                
+        # Combine for the entire image
+        sumWeights = np.sum(sumWeights) / np.sum(sumAll)
+        
+        # Add to the output dictionary along with the date
+        quality[date.strftime('%Y-%m-%d')] = sumWeights
+    
+        # Close the raster
+        baseImg = None
+    
+    return(quality)
 
 
 def maskQualityVI(ndviRaster, qualityRaster, outRaster=None, nodataOut=None):
@@ -2184,11 +2318,15 @@ def warp_raster(src, dst, resampleOption='nearest', outputURI=None, outFormat='M
     if not resampleOption in resampleOptions.keys():
         return False
     
+    nodata = src.GetRasterBand(1).GetNoDataValue()
+    if not nodata:
+        nodata = 0
+    
     # Raster to host the warped output
     if outFormat == 'MEM':
-        rOut = new_raster_from_base(dst, 'temp', 'MEM', 0, src.GetRasterBand(1).DataType, bands=src.RasterCount)
+        rOut = new_raster_from_base(dst, 'temp', 'MEM', nodata, src.GetRasterBand(1).DataType, bands=src.RasterCount)
     else:
-        rOut = new_raster_from_base(dst, outputURI, outFormat, 0, src.GetRasterBand(1).DataType, bands=src.RasterCount)
+        rOut = new_raster_from_base(dst, outputURI, outFormat, nodata, src.GetRasterBand(1).DataType, bands=src.RasterCount)
     
     # Warp: the parameters are source raster, destination raster, source projection, destination projection, resampling option 
     gdal.ReprojectImage(src, rOut, src.GetProjection(), rOut.GetProjection(), resampleOptions[resampleOption])

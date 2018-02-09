@@ -81,13 +81,13 @@ def main():
     # Process decision dummies
     
     # Download images
-    dload = True
+    dload = False
     # Mosaic images for each region and crop to extent 
-    mosaic = True
+    mosaic = False
     # Check quality 
-    checkQuality = True
+    checkQuality = False
     # Fill missing values and mask by exact AOI 
-    fillMissing = True
+    fillMissing = False
     # Smooth images
     smooth = True
     # Create baselines
@@ -160,13 +160,13 @@ def main():
     avgWindow = 3
     # Starting date for the files to include as input in the smoothing process
     #    If None, defaults to 1 year before the end smoothing date
-    startSmooth = '2016-01-17'  # '2012-03-01'
+    startSmooth = '2005-01-01'  # '2012-03-01'
     # Ending date for the files to include as input in the smoothing process
     #    If None, defaults to today
     endSmooth = None
     # Start and end dates for the files to save to the disk after smoothing
     #    If None, defaults to 6 months before end smoothing date
-    startSaveS = '2016-08-01'
+    startSaveS = '2006-01-01'
     # startSaveS = '2017-03-01'
     endSaveS = None  # None to save them up to the end smoothing date
     

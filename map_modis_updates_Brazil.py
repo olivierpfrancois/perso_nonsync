@@ -26,54 +26,74 @@ def run_script(iface):
     satelliteModis = 'terra'  # 'terra' # 'aqua'
     
     # MODIS date to map out
-    modisDates = ['2016-12-18','2017-01-17','2017-02-18','2017-03-22','2017-04-23',
-                  '2017-05-25','2017-06-26','2017-07-28','2017-08-29','2017-09-30',
-                  '2017-11-01','2017-12-03','2018-01-01']
+    modisDates = ['2017-11-17']
     
     # % of coffee masks to map out (the rasters for each should have been prepared in advance
     modisPct = ['5', '15']
     
     # Address for the working directory for MODIS and for the data (boundaries, cities)
     root = '/media/olivier/olivier_ext1/gedata_current/jde_coffee' # '/home/olivierp/jde_coffee'
-    modisPrefix = root+'/MODIS/collection6/'+satelliteModis+'/Vietnam' 
-    dataPrefix = root+'/data/Vietnam' 
+    modisPrefix = root+'/MODIS/collection6/'+satelliteModis+'/Brazil' 
+    dataPrefix = root+'/data/Brazil' 
         
     # Destination folder for the maps from the modisPrefix
     destFolder = 'maps'
     
     # Names of the States/regions to map out. There should be one entry per coffee variety if the state contains more than one
-    states = ['LD']
+    states = ['CER', 'CHA', 'CO', 'ES', 'ES', 'MO', 'SDM', 'SP', 'ZM', 'ZM']
     # Coffee varieties for each of the states
-    varieties = ['coffee']  # Coffee variety for each map
+    varieties = ['arabica', 'arabica', 'arabica', 'arabica', 'robusta', 'arabica', 'arabica', 'arabica', 'arabica', 'robusta']  # Coffee variety for each map
     # Titles for each of the modis maps, to which the modis date will be added at the end
-    mapTitles = ['Lam Dong Crop Health Index \nComparison to 11y History (2006-2016) \nCoffee, ']
+    mapTitles = ['Cerrado Crop Health Index \nComparison to 11y History (2006-2016) \nArabica, ',
+                 'Chapada Crop Health Index \nComparison to 11y History (2006-2016) \nArabica, ',
+                 'Centro Oeste Crop Health Index \nComparison to 11y History (2006-2016) \nArabica, ',
+                 'Espirito Santo Crop Health Index \nComparison to 11y History (2006-2016) \nArabica, ',
+                 'Espirito Santo Crop Health Index \nComparison to 11y History (2006-2016) \nRobusta, ',
+                 'Mogiana Crop Health Index \nComparison to 11y History (2006-2016) \nArabica, ',
+                 'Sul de Minas Crop Health Index \nComparison to 11y History (2006-2016) \nArabica, ',
+                 'Sao Paulo Crop Health Index \nComparison to 11y History (2006-2016) \nArabica, ',
+                 'Zona de Mata Crop Health Index \nComparison to 11y History (2006-2016) \nArabica, ',
+                 'Zona de Mata Crop Health Index \nComparison to 11y History (2006-2016) \nRobusta, ']
     # Name of the boundary shapefile for each of the states
-    boundaries = ['aoi/AOI_LD.shp']
+    boundaries = ['aoi/AOI_CER_microregions_utm.shp',
+                  'aoi/AOI_CHA_microregions_utm.shp',
+                  'aoi/AOI_CO_microregions_utm.shp',
+                  'aoi/AOI_ES_microregions_utm.shp',
+                  'aoi/AOI_ES_microregions_utm.shp',
+                  'aoi/AOI_MO_microregions_utm.shp',
+                  'aoi/AOI_SDM_microregions_utm.shp',
+                  'aoi/AOI_SP_microregions_utm.shp',
+                  'aoi/AOI_ZM_microregions_utm.shp',
+                  'aoi/AOI_ZM_microregions_utm.shp']
     # Name of the shapefile with the cities for each of the states
-    cities = ['LD_cities.shp']
+    cities = ['CER_cities.shp', 'CHA_cities.shp', 'CO_cities.shp',
+              'ES_cities.shp', 'ES_cities.shp', 'MO_cities.shp',
+              'SDM_cities.shp', 'SP_cities.shp', 'ZM_cities.shp',
+              'ZM_cities.shp']
     # Size of the maps for each of the states (options are 'PORTRAIT', 'LANDSCAPE' AND 'SQUARE')
-    mapSizes = ['LANDSCAPE']
+    mapSizes = ['LANDSCAPE', 'PORTRAIT', 'LANDSCAPE', 'PORTRAIT', 'PORTRAIT',
+                'PORTRAIT', 'LANDSCAPE', 'LANDSCAPE', 'PORTRAIT', 'PORTRAIT']
     # ##MAP BOXES Parameters
     # Parameters for the map boxes of each region
-    topX = [12]  # x position (cm) of the top left corner of the map box
-    topY = [12]  # y position (cm) of the top left corner of the map box
+    topX = [8, 8, 10, 5, 5, 10, 8, 8, 8, 8]  # x position (cm) of the top left corner of the map box
+    topY = [10, 10, 35, 30, 30, 35, 5, 10, 15, 15]  # y position (cm) of the top left corner of the map box
     # Size of the bottom margin below the map box. It will condition the size of the mapbox together with the top y position
-    marginBottom = [10]
+    marginBottom = [10, 10, 20, 5, 5, 20, 5, 10, 5, 5]
     # Should the map box be framed?
     frameMapBox = False
     
     # ##TITLE Parameters
-    titleX = [-35]  # x position (cm) of the top left corner of the title box
-    titleY = [4]  # y position (cm) of the top left corner of the title box
-    titleHeight = [25]  # Height (cm) of the title box
+    titleX = [-80, 0, 10, 0, 0, 0, 30, 50, 0, 0]  # x position (cm) of the top left corner of the title box
+    titleY = [4, 4, 4, 4, 4, 4, 4, 4, 4, 4]  # y position (cm) of the top left corner of the title box
+    titleHeight = [25, 25, 25, 25, 25, 25, 25, 25, 25, 25]  # Height (cm) of the title box
     
     # ##LEGEND Parameters
-    legendX = [6]  # x position (cm) of the top left corner of the legend box
-    legendY = [25]  # y position (cm) of the top left corner of the legend box
+    legendX = [6, 6, 6, 6, 6, 6, 6, 6, 6, 6]  # x position (cm) of the top left corner of the legend box
+    legendY = [80, 45, 80, 55, 55, 140, 80, 80, 45, 45]  # y position (cm) of the top left corner of the legend box
     
     # ##COMMENT BOX Parameters 
     # The comment box is set to have the same width as the legend and to be set a little below the legend
-    commentGap = [63]  # How much below the legend should the comment box start?
+    commentGap = [3, 110, 3, 3, 3, 3, 3, 3, 3, 3]  # How much below the legend should the comment box start?
     commentHeight = 40  # Height of the comment box
     # Comment to add to each of the maps 
     comment = 'Notes:'\
@@ -298,10 +318,7 @@ def run_script(iface):
                 # EXPORT THE MAP
                 
                 # Create name
-                outNm = (modisPrefix + '/' + destFolder + 
-                         '/decile_comparison_' + states[s] + 
-                         '_' + varieties[s] + '_' + p + 'pct_' + 
-                         modisDate + '.' + exportFormat.lower())
+                outNm = modisPrefix + '/' + destFolder + '/decile_comparison_' + states[s] + '_' + varieties[s] + '_' + p + 'pct_' + modisDate + '.' + exportFormat.lower() 
                 exportMap(c, exportFormat, outNm)
             
             # Remove raster layer (modis)
