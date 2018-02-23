@@ -13,15 +13,16 @@ from numpy import rank
 # Imports
 
 import pymodis as pm
-import re, os, multiprocessing
-import pathos.multiprocessing as mp
+import re, os
+import multiprocessing as mp
+import pathos.multiprocessing
 from datetime import datetime, timedelta
 from osgeo import gdal, gdalconst, ogr
 import numpy as np
 from csv import DictWriter
 import functools, dill
-#import warnings
-#warnings.filterwarnings('error')
+# import warnings
+# warnings.filterwarnings('error')
 
 #####################################################################################################################
 #####################################################################################################################
@@ -214,7 +215,7 @@ def mosaicMODISWrapper(root, srcFolder, tmpFolder, regions, regionsOut,
         print('Processing date ' + dlong.strftime('%Y-%m-%d'))
         
         # Get the file names for that date
-        files = [f for f in thereHdf if 'A'+d in f]
+        files = [f for f in thereHdf if 'A' + d in f]
         
         # Check if all the tiles were completed
         complete = True
@@ -671,7 +672,7 @@ def smoothSeries(inRasters, toSave, outFolder, regWindow, avgWindow,
                 blocks = smoothingSavitzky(blocks, nodata)
             
             # Return to regular ndvi values between -1 and 1
-            blocks[blocks!=nodata] = np.divide(blocks[blocks!=nodata], 10000.)
+            blocks[blocks != nodata] = np.divide(blocks[blocks != nodata], 10000.)
             
             # Change the values in the output raster
             blocks = np.dsplit(blocks, len(toProcess))
@@ -1657,25 +1658,17 @@ def estimateRank(block, ref, nodata):
     return np.reshape(ranking, extent)
 
 
-def computeAvgNdvi(root, regions, varieties, regionsIn, avgWeights, weightField=None, startAvg=None, endAvg=None, alltouch=False):
+def avgRegionRasterWrap(regionIn, avgWeights, weightField=None,
+                        startAvg=None, endAvg=None, alltouch=False):
     '''
-    Function to compute the average ndvi value per region of interest.
-    Does not return anything, saves averages in a txt file on disk.
-    The input files should come from the smoothing function.
+    Function to compute the average ndvi value for a region of interest.
+    It returns the dictionary with the averages.
+    This is a wrapper for avgRegionRaster, simply pulling out the 
+    images between the dates requested.
     
-    root (str): Address of root folder where regions folders are located
-    regions (list of str): Names of the regions to process. Each region should 
-        have a folder inside root with the same name.
-    varieties (list of lists): varieties to consider for each region. The 
-        function will create a series of baselines for each regions and each 
-        varieties for that region. The name of the variety will be used to 
-        name the baselines.
-        Elements in the list of lists are string, for example 
-        [['arabica','robusta'],['arabica'],...]
-    regionsIn (str): Name of the folder inside the regions folders where to 
+    regionIn (str): Full address of the folder inside the regions folders where to 
         find the input modis rasters to be used for the averaging. These 
         files are outputs of the smoothing. 
-        It should be the same for all the regions.
     avgWeights (str): Raster (single layer) or shapefile with the weights 
         to use for the averages. If shapefile, will be rasterized. 
         If raster, will be resampled to the correct resolution if needed. 
@@ -1705,81 +1698,35 @@ def computeAvgNdvi(root, regions, varieties, regionsIn, avgWeights, weightField=
         endAvg = endAvg.date()
     else:
         endAvg = datetime.strptime(endAvg, '%Y-%m-%d').date()
+        
+    # Import all the smooth modis images on disk
+    onDisk = [os.path.join(regionIn, f) 
+              for f in os.listdir(regionIn) if f.endswith('.tif')]
+    # Dates of these files
+    datesAll = [re.search('_([0-9]{4}-[0-9]{2}-[0-9]{2})', f).group(1) 
+                for f in onDisk]
+    # Transform into date format
+    datesAll = [datetime.strptime(d, '%Y-%m-%d').date() for d in datesAll]
+    # Keep only the files and dates within the dates to process
+    onDisk = [f for f, d in zip(onDisk, datesAll) if d >= startAvg and d <= endAvg]
+    datesAll = [d for d in datesAll if d >= startAvg and d <= endAvg]
     
-    # Create an empty dictionary to get the values for each of the regions
-    averages = {}
-    colnames = []
+    if not onDisk:
+        print('no modis images to process in ' + states[r])
+        return {}
     
-    for r in range(len(regions)):
-        for v in range(len(varieties[r])):
-            if not avgWeights[r][v]:
-                continue
-            
-            colnames.append(regions[r] + '_' + varieties[r][v])
-            
-            # Get the images to consider
-            print('Averaging region ' + str(regions[r]) + '...')
-            
-            # Import all the smooth modis images on disk
-            onDisk = [os.path.join(root, regions[r], regionsIn, f) 
-                      for f in os.listdir(os.path.join(root, regions[r], regionsIn)) 
-                      if f.endswith('.tif')]
-            
-            # Dates of these files
-            datesAll = [re.search('_([0-9]{4}-[0-9]{2}-[0-9]{2})', f).group(1) for f in onDisk]
-            # Transform into date format
-            datesAll = [datetime.strptime(d, '%Y-%m-%d').date() for d in datesAll]
-            
-            # Keep only the files and dates within the dates to process
-            onDisk = [f for f, d in zip(onDisk, datesAll) if d >= startAvg and d <= endAvg]
-            datesAll = [d for d in datesAll if d >= startAvg and d <= endAvg]
-            
-            if not onDisk:
-                print('no modis images to process in ' + regions[r])
-                continue
-            
-            if avgWeights[r] and avgWeights[r][v]:
-                avgW = avgWeights[r][v]
-            else:
-                avgW = None
-            
-            # Compute the averages for all the dates
-            avgRegion = avgRegionRaster(images=onDisk,
-                                        datesImg=datesAll,
-                                        weightsRaster=avgW,
-                                        weightField=weightField,
-                                        alltouch=alltouch,
-                                        blockXSize=256, blockYSize=256)
-            
-            if not avgRegion:
-                break
-            
-            # Transform the results into a dictionary easier to export
-            for k, s in avgRegion.iteritems():
-                # Transform into 'per Hectare'
-                s = s / (250.) * 10000.
-                if k in averages:
-                    averages[k][regions[r] + '_' + varieties[r][v]] = s
-                else:
-                    averages[k] = {}
-                    averages[k]['date'] = k
-                    averages[k][regions[r] + '_' + varieties[r][v]] = s
-            
-    # Export the dictionary
-    outMin = min(datesAll)
-    outMax = max(datesAll)
-    outNm = 'Weighted_avg_ndvi_' + outMin.strftime('%Y-%m-%d') + '_' + outMax.strftime('%Y-%m-%d') + '.txt'
-    # Sort the dates
-    datesAll.sort()
-    # order the output by date in a list. Each element is an element of the original dictionary and will be exported
-    out = []
-    for date in datesAll:
-        out.append(averages[date.strftime('%Y-%m-%d')])
-    with open(os.path.join(root, outNm), "w") as f:
-        dict_writer = DictWriter(f, ['date'] + colnames, extrasaction='ignore', delimiter="\t", restval="0")
-        dict_writer.writeheader()
-        for p in out:
-            dict_writer.writerow(p)
+    # Compute the averages for all the dates
+    avgRegion = avgRegionRaster(images=onDisk,
+                                datesImg=datesAll,
+                                weightsRaster=avgWeights,
+                                weightField=weightField,
+                                alltouch=False,
+                                blockXSize=256, blockYSize=256)
+    
+    if not avgRegion:
+        return False
+    
+    return avgRegion
 
 
 def avgRegionRaster(images, datesImg, weightsRaster=None, weightField=None,
@@ -1929,7 +1876,6 @@ def avgRegionRaster(images, datesImg, weightsRaster=None, weightField=None,
                 
         # Combine for the entire image
         sumNdvi = np.sum(sumNdvi) / np.sum(sumWeights)
-            
         
         # Add to the output dictionary along with the date
         average[date.strftime('%Y-%m-%d')] = sumNdvi
@@ -1940,7 +1886,53 @@ def avgRegionRaster(images, datesImg, weightsRaster=None, weightField=None,
     return(average)
 
 
-def computeQualityIndexNdvi(images, datesImg, missingValue=None, 
+def computeQualityIndexNdviWrap(regionIn, avgWeights, weightField=None,
+                                missingValue=None, startAvg=None, endAvg=None,
+                                alltouch=False):
+    # Transform into date format
+    if not startAvg:
+        startAvg = datetime.now() - timedelta(days=365)
+        startAvg = startAvg.date()
+    else:
+        startAvg = datetime.strptime(startAvg, '%Y-%m-%d').date()
+    if not endAvg:
+        endAvg = datetime.now()
+        endAvg = endAvg.date()
+    else:
+        endAvg = datetime.strptime(endAvg, '%Y-%m-%d').date()
+        
+    # Import all the modis images on disk
+    onDisk = [os.path.join(regionIn, f) 
+              for f in os.listdir(regionIn) if f.endswith('.tif')]
+    # Dates of these files
+    datesAll = [re.search('_([0-9]{4}-[0-9]{2}-[0-9]{2})', f).group(1) 
+                for f in onDisk]
+    # Transform into date format
+    datesAll = [datetime.strptime(d, '%Y-%m-%d').date() for d in datesAll]
+    # Keep only the files and dates within the dates to process
+    onDisk = [f for f, d in zip(onDisk, datesAll) if d >= startAvg and d <= endAvg]
+    datesAll = [d for d in datesAll if d >= startAvg and d <= endAvg]
+    
+    if not onDisk:
+        print('no modis images to process in ' + states[r])
+        return {}
+    
+    # Compute the averages for all the dates
+    avgRegion = computeQualityIndexNdvi(images=onDisk,
+                                        datesImg=datesAll,
+                                        missingValue=missingValue,
+                                        weightsRaster=avgWeights,
+                                        weightField=weightField,
+                                        alltouch=False,
+                                        blockXSize=256, blockYSize=256)
+    
+    if not avgRegion:
+        return False
+    
+    return avgRegion
+    
+
+def computeQualityIndexNdvi(images, datesImg, missingValue=None,
                             weightsRaster=None, weightField=None,
                     alltouch=False, blockXSize=256, blockYSize=256):
     
@@ -1986,7 +1978,9 @@ def computeQualityIndexNdvi(images, datesImg, missingValue=None,
             geoBase = baseImg.GetGeoTransform()
             reproject = [1 for a, b in zip(geoSmooth, geoBase) if not a == b]
             if reproject:
-                weightsRaster = warp_raster(weightsRaster, baseImg, resampleOption='nearest', outputURI=None, outFormat='MEM')
+                weightsRaster = warp_raster(weightsRaster, baseImg,
+                                            resampleOption='nearest',
+                                            outputURI=None, outFormat='MEM')
         
         baseImg = None
         nodataWeights = weightsRaster.GetRasterBand(1).GetNoDataValue()
@@ -2034,13 +2028,13 @@ def computeQualityIndexNdvi(images, datesImg, missingValue=None,
                 blockBase = blockBase.astype(np.float32)
                 
                 # Replace the no data values by 0
-                #blockBase[np.logical_or(
+                # blockBase[np.logical_or(
                 #    np.logical_or(blockBase == nodataBase, np.isnan(blockBase)),
                 #    np.logical_or(blockBase > 1, blockBase < -1))] = 0.
                 
                 # Create a mask of the block to only keep 
                 # the missing value
-                baseMask = blockBase==missingValue
+                baseMask = blockBase == missingValue
                     
                 if weightsRaster:
                     # Read the block from the weights
@@ -2061,7 +2055,7 @@ def computeQualityIndexNdvi(images, datesImg, missingValue=None,
                     blockWeight = np.ones(blockBase.shape)
                     
                 # Set the no data values in the image as zero weight
-                #blockWeight[blockBase == 0.] = 0.
+                # blockWeight[blockBase == 0.] = 0.
                 
                 # Estimate the weighted sum for each pixel
                 sumWeights.append(np.sum(np.multiply(baseMask, blockWeight)))
@@ -2077,6 +2071,263 @@ def computeQualityIndexNdvi(images, datesImg, missingValue=None,
         baseImg = None
     
     return(quality)
+
+
+def avgRegionQualWrap(regionIn, maskedIn, avgWeights, weightField=None,
+                      startAvg=None, endAvg=None, alltouch=False):
+    '''
+    ALTERNATIVE FUNCTION TO AVGREGIONRASTERWRAP TO CALCULTATE THE 
+    AVERAGES ONLY ON GOOD QUALITY PIXELS
+    
+    Function to compute the average ndvi value for a region of interest.
+    It returns the dictionary with the averages.
+    This is a wrapper for avgRegionRaster, simply pulling out the 
+    images between the dates requested.
+    
+    regionIn (str): Full address of the folder inside the regions folders where to 
+        find the input modis rasters to be used for the averaging. These 
+        files are outputs of the smoothing. 
+    avgWeights (str): Raster (single layer) or shapefile with the weights 
+        to use for the averages. If shapefile, will be rasterized. 
+        If raster, will be resampled to the correct resolution if needed. 
+        In each case the information in each pixel/polygon should be a density 
+        of crop of interest (0 < d < 1).
+    weightField (str): Only used if avgWeights is a shapefile. Name of the 
+        field containing the weight/density information.
+    startAvg (str): Starting date for the files to consider in the averaging 
+        (included). There will be one value per date.
+    endAvg (str): Ending date for the files to consider in the averaging 
+        (included).
+    alltouch (boolean): true or false, whether all the pixels touched by the 
+        region should be considered in the average or only the pixels with 
+        their centroid inside the region.
+        This parameter is used when rasterizing the shapefile with the 
+        weights and will therefore only be used if avgWeights is a shapefile.
+    '''
+    
+    # Transform into date format
+    if not startAvg:
+        startAvg = datetime.now() - timedelta(days=365)
+        startAvg = startAvg.date()
+    else:
+        startAvg = datetime.strptime(startAvg, '%Y-%m-%d').date()
+    if not endAvg:
+        endAvg = datetime.now()
+        endAvg = endAvg.date()
+    else:
+        endAvg = datetime.strptime(endAvg, '%Y-%m-%d').date()
+        
+    # Import all the smooth modis images on disk
+    onDisk = [os.path.join(regionIn, f) 
+              for f in os.listdir(regionIn) if f.endswith('.tif')]
+    # Dates of these files
+    datesAll = [re.search('_([0-9]{4}-[0-9]{2}-[0-9]{2})', f).group(1) 
+                for f in onDisk]
+    # Get the corresponding quality files to only take into account 
+    # good quality pixels
+    qualAll = [os.path.join(maskedIn, f) 
+                for f in os.listdir(maskedIn) if f.endswith('.tif')]
+    qualDisk = []
+    for d in datesAll:
+        add = [f for f in qualAll if d in f]
+        if not add:
+            add = ['']
+        qualDisk = qualDisk + add 
+    qualAll = None
+    # Transform into date format
+    datesAll = [datetime.strptime(d, '%Y-%m-%d').date() for d in datesAll]
+    # Keep only the files and dates within the dates to process
+    onDisk = [f for f, d in zip(onDisk, datesAll) if d >= startAvg and d <= endAvg]
+    datesAll = [d for d in datesAll if d >= startAvg and d <= endAvg]
+    
+    if not onDisk:
+        print('no modis images to process in ' + states[r])
+        return {}
+    
+    # Compute the averages for all the dates
+    avgRegion = avgRegionQual(images=onDisk,
+                                datesImg=datesAll,
+                                maskedQual=qualDisk,
+                                weightsRaster=avgWeights,
+                                weightField=weightField,
+                                alltouch=False,
+                                blockXSize=256, blockYSize=256)
+    
+    if not avgRegion:
+        return False
+    
+    return avgRegion
+
+
+def avgRegionQual(images, datesImg, maskedQual, weightsRaster=None, weightField=None,
+                    alltouch=False, blockXSize=256, blockYSize=256):
+    '''
+    Takes a set of images and computes the average using the weights in 
+    weightsRaster if any for each of them.
+    Returns a dictionary with the average value for each image. The dictionary 
+    keys are the dates of the images as provided in datesImg
+    
+    images (list): list of full addresses of images to average.
+    datesImg (list): list of the same length as images, providing for each
+        the date of the image (or some unique index). They should be unique.
+    weightsRaster (str): Raster (single layer) or shapefile with the weights 
+        to use for the averages. If shapefile, will be rasterized. 
+        If raster, will be resampled to the correct resolution if needed. 
+        In each case the information in each pixel/polygon should be a density 
+        of crop of interest (0 < d < 1).
+    weightField (str): Only used if avgWeights is a shapefile. Name of the 
+        field containing the weight/density information.
+    alltouch (boolean): true or false, whether all the pixels touched by the 
+        region should be considered in the average or only the pixels with 
+        their centroid inside the region.
+        This parameter is used when rasterizing the shapefile with the 
+        weights and will therefore only be used if avgWeights is a shapefile.
+    blockXSize (int): X size of the block to be processed at once from the 
+        rasters (code proceeds by block for memory management).
+    blockYSize (int): Y size of the block to be processed at once from the 
+        rasters (code proceeds by block for memory management).
+    '''
+    
+    if weightsRaster:
+        # Get a base image as a reference for format
+        baseImg = gdal.Open(images[0])
+        
+        # Rasterize the gridded weights if needed or simply import it
+        if weightsRaster.endswith('.shp'):
+            if not weightField:
+                print('The name of the field with the densities needs to be specified to average')
+                return(False)
+            
+            # Import the vector layer
+            # Open the shapefile
+            driver = ogr.GetDriverByName('ESRI Shapefile')
+            dataSource = driver.Open(weightsRaster, 0)  # 0 means read-only. 1 means writeable.
+            
+            # Create layer
+            inVecLayer = dataSource.GetLayer(0)
+            
+            # Prepare an empty raster to rasterize the shapefile
+            weightsRaster = new_raster_from_base(baseImg, 'temp', 'MEM', -1,
+                                                 gdal.GDT_Float32) 
+            
+            # Transform alltouch
+            if alltouch:
+                alltouch = 'TRUE'
+            else:
+                alltouch = 'FALSE'
+            
+            # Rasterize the vector layer:
+            gdal.RasterizeLayer(weightsRaster, [1], inVecLayer,
+                                options=['ALL_TOUCHED=' + alltouch,
+                                         'ATTRIBUTE=' + weightField])
+            
+            inVecLayer = None
+            
+        elif weightsRaster.endswith(('.tif', '.TIF')):
+            weightsRaster = gdal.Open(weightsRaster)
+            
+            # Change the resolution of the raster to match the images if needed
+            
+            geoSmooth = weightsRaster.GetGeoTransform()
+            geoBase = baseImg.GetGeoTransform()
+            reproject = [1 for a, b in zip(geoSmooth, geoBase) if not a == b]
+            if reproject:
+                weightsRaster = warp_raster(weightsRaster, baseImg,
+                                            resampleOption='nearest',
+                                            outputURI=None, outFormat='MEM')
+        
+        baseImg = None
+        nodataWeights = weightsRaster.GetRasterBand(1).GetNoDataValue()
+    
+    # Prepare an empty dictionary to hold the results
+    average = {}
+    
+    # Loop through the images to compute the average for each
+    for img, date, mask in zip(images, datesImg, maskedQual):
+        
+        # Import the image
+        baseImg = gdal.Open(img)
+        
+        if mask:
+            maskImg = gdal.Open(mask)
+        
+        # Loop through the blocks to compute the average for each
+        
+        # Get the size of the rasters to identify the limits of the blocks to loop through
+        band = baseImg.GetRasterBand(1)
+        # Get the no data value
+        nodataBase = band.GetNoDataValue()
+        # Get the size of the raster
+        xsize = band.XSize
+        ysize = band.YSize
+        # Get the number of blocks in x and y directions based on the block size
+        xBlocks = int(round(xsize / blockXSize)) + 1
+        yBlocks = int(round(ysize / blockYSize)) + 1
+        band = None
+        
+        sumNdvi = []
+        sumWeights = []
+        
+        for xStep in range(xBlocks):
+            for yStep in range(yBlocks):
+                
+                # Read the block from the image
+                blockBase = readRasterBlock(baseImg,
+                                            xStep * blockXSize, yStep * blockYSize,
+                                            blockXSize, blockYSize)
+                
+                # Recast the type to be sure
+                blockBase = blockBase.astype(np.float32)
+                
+                # Replace the no data values by 0
+                blockBase[np.logical_or(
+                    np.logical_or(blockBase == nodataBase, np.isnan(blockBase)),
+                    np.logical_or(blockBase > 1, blockBase < -1))] = 0.
+                
+                if weightsRaster:
+                    # Read the block from the weights
+                    blockWeight = readRasterBlock(weightsRaster,
+                                                  xStep * blockXSize, yStep * blockYSize,
+                                                  blockXSize, blockYSize)
+                    
+                    # Recast the type to be sure
+                    blockWeight = blockWeight.astype(np.float32)
+                
+                    # Replace the no data values by 0
+                    blockWeight[np.logical_or(
+                        np.logical_or(blockWeight == nodataWeights, np.isnan(blockWeight)),
+                        np.logical_or(blockWeight > 1, blockWeight < 0))] = 0.
+                    
+                    # Set the no data values in the image as zero weight
+                    blockWeight[blockBase == 0.] = 0.
+                    
+                else:
+                    blockWeight = np.copy(blockBase)
+                    
+                    # Replace the non 0 data values by 1
+                    blockWeight[blockWeight != 0.] = 1.
+                
+                # Remove the weights were the pixels are of low quality
+                if mask:
+                    maskBlock = readRasterBlock(maskImg,
+                                            xStep * blockXSize, yStep * blockYSize,
+                                            blockXSize, blockYSize)
+                    blockWeight[maskBlock == -3000] = 0.
+                
+                # Estimate the weighted sum for each pixel
+                sumNdvi.append(np.sum(np.multiply(blockBase, blockWeight)))
+                sumWeights.append(np.sum(blockWeight))
+                
+        # Combine for the entire image
+        sumNdvi = np.sum(sumNdvi) / np.sum(sumWeights)
+        
+        # Add to the output dictionary along with the date
+        average[date.strftime('%Y-%m-%d')] = sumNdvi
+    
+        # Close the raster
+        baseImg = None
+    
+    return(average)
 
 
 def maskQualityVI(ndviRaster, qualityRaster, outRaster=None, nodataOut=None):
