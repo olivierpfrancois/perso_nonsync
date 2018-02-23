@@ -52,7 +52,7 @@ def downloadMODIS(dstFolder, pwd, user, tiles, product, startDownload=None,
     
     if not satellite in ['aqua', 'terra']:
         print('MODIS satellite should be aqua or terra')
-        return false
+        return False
     
     if not endDownload:
         # Defaults to today's date
@@ -214,7 +214,7 @@ def mosaicMODISWrapper(root, srcFolder, tmpFolder, regions, regionsOut,
         print('Processing date ' + dlong.strftime('%Y-%m-%d'))
         
         # Get the file names for that date
-        files = [f for f in thereHdf if d in f]
+        files = [f for f in thereHdf if 'A'+d in f]
         
         # Check if all the tiles were completed
         complete = True
@@ -2033,10 +2033,15 @@ def computeQualityIndexNdvi(images, datesImg, missingValue=None,
                 # Recast the type to be sure
                 blockBase = blockBase.astype(np.float32)
                 
+                # Replace the no data values by 0
+                #blockBase[np.logical_or(
+                #    np.logical_or(blockBase == nodataBase, np.isnan(blockBase)),
+                #    np.logical_or(blockBase > 1, blockBase < -1))] = 0.
+                
                 # Create a mask of the block to only keep 
                 # the missing value
-                blockBase = blockBase==missingValue
-                
+                baseMask = blockBase==missingValue
+                    
                 if weightsRaster:
                     # Read the block from the weights
                     blockWeight = readRasterBlock(weightsRaster,
@@ -2051,17 +2056,17 @@ def computeQualityIndexNdvi(images, datesImg, missingValue=None,
                         np.logical_or(blockWeight == nodataWeights, np.isnan(blockWeight)),
                         np.logical_or(blockWeight > 1, blockWeight < 0))] = 0.
                     
-                    # Set the no data values in the image as zero weight
-                    blockWeight[blockBase == 0.] = 0.
-                    
                 else:
                     # Create an array of same size as block with only ones
                     blockWeight = np.ones(blockBase.shape)
+                    
+                # Set the no data values in the image as zero weight
+                #blockWeight[blockBase == 0.] = 0.
                 
                 # Estimate the weighted sum for each pixel
-                sumWeights.append(np.sum(np.multiply(blockBase, blockWeight)))
-                sumAll.append(np.sum(blockWeight))
-                
+                sumWeights.append(np.sum(np.multiply(baseMask, blockWeight)))
+                sumAll.append(np.sum(blockWeight))       
+        
         # Combine for the entire image
         sumWeights = np.sum(sumWeights) / np.sum(sumAll)
         

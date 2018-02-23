@@ -28,6 +28,7 @@ import pathos.multiprocessing as mp
 import MODIS_gedata_toolbox as md  # GEDATA toolbox for MODIS related tools
 import gapfill  # Python implementation of the interpolation algorithm
 from datetime import datetime, timedelta
+from csv import DictWriter
 
 
 def main():
@@ -41,7 +42,7 @@ def main():
     nCores = 5
     
     # Satellite
-    satelliteModis = 'terra'  # 'terra' # 'aqua'
+    satelliteModis = 'aqua'  # 'terra' # 'aqua'
     
     # Root folder
     prefixRootSys = '/media/olivier/olivier_ext1/gedata_current/jde_coffee' # '/home/olivierp/jde_coffee'  # 'E:/gedata_current'   
@@ -89,13 +90,16 @@ def main():
     # Fill missing values and mask by exact AOI 
     fillMissing = False
     # Smooth images
-    smooth = True
+    smooth = False
     # Create baselines
-    createBaselines = True
+    createBaselines = False
     # Rank individual images against baseline images
     ranking = True
     # Average MODIS value in each region
     avgValue = True
+    # Compute the quality information to inform the 
+    # average values for each region
+    qualIndex = True
     
     # Get the percentage of missing values for each pixel across history
     checkPercMissing = False
@@ -146,9 +150,9 @@ def main():
     # Output folder for the images to fill
     outMissing = statesFilledFolder
     # Year(s) of images to fill
-    yearsMissing = [2017,2018]
+    yearsMissing = range(2007,2019)
     # Day(s) of images to fill
-    daysMissing = [[1,17,353],[1,17]]
+    daysMissing = None #[[1,17,353],[1,17]]
     # Suffix to put at the end of the name of the 
     # images after filling
     suffMissing = 'f'
@@ -444,14 +448,188 @@ def main():
                             refDecilesIn=statesRefFolder,
                             startRank=startRank, endRank=endRank,
                             mask=maskRank, minDensity=minCoffee)
-
+    
     if avgValue:
         print('Computing the average ndvi value for each zone')
-        md.computeAvgNdvi(root=dst, regions=states, varieties=varieties,
+        '''
+        md.computeAvgNdvi(root=dst, regions=states, varieties=varieties, 
                           regionsIn=statesSmoothFolder, avgWeights=avgWeights,
-                          weightField=weightField, startAvg=startAvg,
+                          weightField=weightField, startAvg=startAvg, 
                           endAvg=endAvg)
-
+        '''
+        
+        # Transform into date format
+        if not startAvg:
+            startAvg = datetime.now() - timedelta(days=365)
+            startAvg = startAvg.date()
+        else:
+            startAvg = datetime.strptime(startAvg, '%Y-%m-%d').date()
+        if not endAvg:
+            endAvg = datetime.now()
+            endAvg = endAvg.date()
+        else:
+            endAvg = datetime.strptime(endAvg, '%Y-%m-%d').date()
+        
+        # Create an empty dictionary to get the values for each of the regions
+        averages = {}
+        if qualIndex:
+            qualityMasked = {}
+            qualityFilled = {}
+        colnames = []
+        
+        for r in range(len(states)):
+            for v in range(len(varieties[r])):
+                if not avgWeights[r][v]:
+                    continue
+                
+                colnames.append(states[r] + '_' + varieties[r][v])
+                
+                # Get the images to consider
+                print('Averaging region ' + str(states[r]) + '...')
+                
+                # Import all the smooth modis images on disk
+                onDisk = [os.path.join(dst, states[r], statesSmoothFolder, f) 
+                          for f in os.listdir(os.path.join(dst, states[r], statesSmoothFolder)) 
+                          if f.endswith('.tif')]
+                # Dates of these files
+                datesAll = [re.search('_([0-9]{4}-[0-9]{2}-[0-9]{2})', f).group(1) for f in onDisk]
+                # Transform into date format
+                datesAll = [datetime.strptime(d, '%Y-%m-%d').date() for d in datesAll]
+                # Keep only the files and dates within the dates to process
+                onDisk = [f for f, d in zip(onDisk, datesAll) if d >= startAvg and d <= endAvg]
+                datesAll = [d for d in datesAll if d >= startAvg and d <= endAvg]
+                
+                if not onDisk:
+                    print('no modis images to process in ' + states[r])
+                    continue
+                
+                if qualIndex:
+                    # Masked modis images on disk
+                    onDiskMasked = [os.path.join(dst, states[r], statesMaskedFolder, f) 
+                                    for f in os.listdir(os.path.join(dst, states[r], statesMaskedFolder)) 
+                                    if f.endswith('.tif')]
+                    # Dates of these files
+                    datesMasked = [re.search('_([0-9]{4}-[0-9]{2}-[0-9]{2})', f).group(1) for f in onDiskMasked]
+                    # Transform into date format
+                    datesMasked = [datetime.strptime(d, '%Y-%m-%d').date() for d in datesMasked]
+                    # Keep only the files and dates within the dates to process
+                    onDiskMasked = [f for f, d in zip(onDiskMasked, datesMasked) if d >= startAvg and d <= endAvg]
+                    datesMasked = [d for d in datesMasked if d >= startAvg and d <= endAvg]
+                
+                    # Filled modis images on disk
+                    onDiskFilled = [os.path.join(dst, states[r], statesFilledFolder, f) 
+                                    for f in os.listdir(os.path.join(dst, states[r], statesFilledFolder)) 
+                                    if f.endswith('.tif')]
+                    # Dates of these files
+                    datesFilled = [re.search('_([0-9]{4}-[0-9]{2}-[0-9]{2})', f).group(1) for f in onDiskFilled]
+                    # Transform into date format
+                    datesFilled = [datetime.strptime(d, '%Y-%m-%d').date() for d in datesFilled]
+                    # Keep only the files and dates within the dates to process
+                    onDiskFilled = [f for f, d in zip(onDiskFilled, datesFilled) if d >= startAvg and d <= endAvg]
+                    datesFilled = [d for d in datesFilled if d >= startAvg and d <= endAvg]
+                
+                if avgWeights[r] and avgWeights[r][v]:
+                    avgW = avgWeights[r][v]
+                else:
+                    avgW = None
+                
+                # Compute the averages for all the dates
+                avgRegion = md.avgRegionRaster(images=onDisk,
+                                            datesImg=datesAll,
+                                            weightsRaster=avgW,
+                                            weightField=weightField,
+                                            alltouch=False,
+                                            blockXSize=256, blockYSize=256)
+                
+                if not avgRegion:
+                    break
+                
+                if qualIndex:
+                    # Compute the quality for all the dates
+                    if datesMasked:
+                        qualMasked = md.computeQualityIndexNdvi(images=onDiskMasked, 
+                                                             datesImg=datesMasked, 
+                                                             missingValue=-3000,
+                                                             weightsRaster=avgW, 
+                                                             weightField=weightField,
+                                                             alltouch=False, 
+                                                             blockXSize=256, blockYSize=256)
+                
+                    if datesFilled:
+                        qualFilled = md.computeQualityIndexNdvi(images=onDiskFilled, 
+                                                             datesImg=datesFilled, 
+                                                             missingValue=None,
+                                                             weightsRaster=avgW, 
+                                                             weightField=weightField,
+                                                             alltouch=False, 
+                                                             blockXSize=256, blockYSize=256)
+                        
+                # Transform the results into a dictionary easier to export
+                for k, s in avgRegion.iteritems():
+                    # Transform into 'per Hectare'
+                    s = s / (250.) * 10000.
+                    if not k in averages:
+                        averages[k] = {}
+                        averages[k]['date'] = k
+                    averages[k][states[r] + '_' + varieties[r][v]] = s
+                        
+                    if qualIndex:
+                        if not k in qualityMasked:
+                            qualityMasked[k] = {}
+                            qualityMasked[k]['date'] = k
+                        if k in qualMasked.keys():
+                            qualityMasked[k][states[r] + '_' + varieties[r][v]] = qualMasked[k]
+                        else:
+                            qualityMasked[k][states[r] + '_' + varieties[r][v]] = ' '
+                            
+                        if not k in qualityFilled:
+                            qualityFilled[k] = {}
+                            qualityFilled[k]['date'] = k
+                        if k in qualFilled.keys():
+                            qualityFilled[k][states[r] + '_' + varieties[r][v]] = qualFilled[k]
+                        else:
+                            qualityFilled[k][states[r] + '_' + varieties[r][v]] = ' '
+        
+        # Export the dictionaries
+        outMin = min(datesAll)
+        outMax = max(datesAll)
+        outNm = ('Weighted_avg_ndvi_' + outMin.strftime('%Y-%m-%d') + '_' + 
+                 outMax.strftime('%Y-%m-%d') + '.txt')
+        if qualIndex:
+            outNmMasked = ('Quality_masked_ndvi_' + outMin.strftime('%Y-%m-%d') + '_' + 
+                           outMax.strftime('%Y-%m-%d') + '.txt')
+            outNmFilled = ('Quality_filled_ndvi_' + outMin.strftime('%Y-%m-%d') + '_' + 
+                           outMax.strftime('%Y-%m-%d') + '.txt')
+        # Sort the dates
+        datesAll.sort()
+        # order the output by date in a list. Each element is an element of the original dictionary and will be exported
+        out = []
+        if qualIndex:
+            outM = []
+            outF = []
+        for date in datesAll:
+            out.append(averages[date.strftime('%Y-%m-%d')])
+            if qualIndex:
+                outM.append(qualityMasked[date.strftime('%Y-%m-%d')])
+                outF.append(qualityFilled[date.strftime('%Y-%m-%d')])
+            
+        with open(os.path.join(dst, outNm), "w") as f:
+            dict_writer = DictWriter(f, ['date'] + colnames, extrasaction='ignore', delimiter="\t", restval="0")
+            dict_writer.writeheader()
+            for p in out:
+                dict_writer.writerow(p)
+        if qualIndex:
+            with open(os.path.join(dst, outNmMasked), "w") as f:
+                dict_writer = DictWriter(f, ['date'] + colnames, extrasaction='ignore', delimiter="\t", restval="0")
+                dict_writer.writeheader()
+                for p in outM:
+                    dict_writer.writerow(p)
+            with open(os.path.join(dst, outNmFilled), "w") as f:
+                dict_writer = DictWriter(f, ['date'] + colnames, extrasaction='ignore', delimiter="\t", restval="0")
+                dict_writer.writeheader()
+                for p in outF:
+                    dict_writer.writerow(p)
+    
     if checkPercMissing:
         # Get the names of all the masked rasters on file
         onDisk = [os.path.join(dst, 'CO/masked_missing', f) for 
