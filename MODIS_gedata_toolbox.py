@@ -519,7 +519,7 @@ def smoothMODISWrapper(root, regions, regionsIn, regionsOut, startSmooth, endSmo
     # Declare parallel workers if option
     if parallel and len(regions) > 1:
         if not nCores:
-            nCores = multiprocessing.cpu_count()
+            nCores = mp.cpu_count()
         
         p = mp.Pool(nCores)
     
@@ -1090,7 +1090,7 @@ def createBaseline(root, regions, varieties, regionsIn, regionsOut, startRef,
     
     if parallel:
         if not nCores:
-            nCores = multiprocessing.cpu_count()
+            nCores = mp.cpu_count()
         
         p = mp.Pool(nCores)
     
@@ -1712,7 +1712,6 @@ def avgRegionRasterWrap(regionIn, avgWeights, weightField=None,
     datesAll = [d for d in datesAll if d >= startAvg and d <= endAvg]
     
     if not onDisk:
-        print('no modis images to process in ' + states[r])
         return {}
     
     # Compute the averages for all the dates
@@ -1914,7 +1913,6 @@ def computeQualityIndexNdviWrap(regionIn, avgWeights, weightField=None,
     datesAll = [d for d in datesAll if d >= startAvg and d <= endAvg]
     
     if not onDisk:
-        print('no modis images to process in ' + states[r])
         return {}
     
     # Compute the averages for all the dates
@@ -2141,7 +2139,6 @@ def avgRegionQualWrap(regionIn, maskedIn, avgWeights, weightField=None,
     datesAll = [d for d in datesAll if d >= startAvg and d <= endAvg]
     
     if not onDisk:
-        print('no modis images to process in ' + states[r])
         return {}
     
     # Compute the averages for all the dates
