@@ -7,9 +7,16 @@ import scipy.stats as ss
 import pandas as pd
 import statsmodels.formula.api as smf
 import MODIS_gedata_toolbox as md
+<<<<<<< Updated upstream:gapfill.py
 import os, re, multiprocessing
 import pathos.multiprocessing as mp
 import functools
+=======
+import os, re
+import multiprocessing as mp
+# import pathos.multiprocessing as mp
+import functools, dill
+>>>>>>> Stashed changes:gapfill_alt_parallel.py
 
 
 def array2TwoDim(a):
@@ -202,7 +209,7 @@ def gapFill(rasters, seasons, years, outFolder, suffix, nodata=None,
         if not os.path.isfile(r):
             return False
     
-    #Check that the season subset has been provided in the right format
+    # Check that the season subset has been provided in the right format
     if not subsetYears:
         subsetYears = set(years)
         subsetYears = list(subsetYears)
@@ -210,7 +217,7 @@ def gapFill(rasters, seasons, years, outFolder, suffix, nodata=None,
         
         if subsetSeasons:
             if any(isinstance(el, list) for el in subsetSeasons):
-                raise ValueError('subsetSeasons should be a simple list of ' +
+                raise ValueError('subsetSeasons should be a simple list of ' + 
                                  'num if subsetYears is None')
             
             subsetSeasons = [subsetSeasons for _ in subsetYears]
@@ -218,10 +225,10 @@ def gapFill(rasters, seasons, years, outFolder, suffix, nodata=None,
     else:
         if subsetSeasons:
             if not len(subsetSeasons) == len(subsetYears):
-                raise ValueError('subsetSeasons should be a list of lists' +
+                raise ValueError('subsetSeasons should be a list of lists' + 
                                  'of the same length as subsetYears')
             if not all(isinstance(el, list) for el in subsetSeasons):
-                raise ValueError('Each element of subsetSeasons should be a list' +
+                raise ValueError('Each element of subsetSeasons should be a list' + 
                                  'with the seasons for that year')
           
     if not subsetSeasons:
@@ -255,15 +262,47 @@ def gapFill(rasters, seasons, years, outFolder, suffix, nodata=None,
     
     dst = None
     
-    if parallel:
+    # Prepare all the possible combinations
+    combi = []
+    for y, S in zip(subsetYears, subsetSeasons):
+        combi = combi + [[s, y] for s in S]
+    
+    if not parallel or len(combi) == 1:
+        for i in combi:
+            paraGapFill(ind=i, rasters=rasters, seasons=seasons, years=years,
+                        nodata=nodata, outFolder=outFolder, suffix=suffix,
+                        iMax=iMax, clipRange=clipRange)
+        
+    else:
         if not nCores:
             nCores = multiprocessing.cpu_count()
         
         p = mp.Pool(nCores)
+<<<<<<< Updated upstream:gapfill.py
     
     #list to hold the expansion information
     outI = []
     
+=======
+        
+        pp = functools.partial(paraGapFill,
+                               rasters=rasters,
+                               seasons=seasons,
+                               years=years,
+                               nodata=nodata,
+                               outFolder=outFolder,
+                               suffix=suffix,
+                               iMax=iMax,
+                               clipRange=clipRange)
+        
+        p.map(pp, combi)
+        
+        # Close the threads
+        p.close()
+        p.join()
+        
+    '''
+>>>>>>> Stashed changes:gapfill_alt_parallel.py
     # Loop through all the rasters in the subset to fill the missing values
     for y, S in zip(subsetYears, subsetSeasons):
         for s in S:
@@ -351,8 +390,80 @@ def gapFill(rasters, seasons, years, outFolder, suffix, nodata=None,
         # Close the threads
         p.close()
         p.join()
+<<<<<<< Updated upstream:gapfill.py
     
     return outI
+=======
+    '''
+
+
+def paraGapFill(ind, rasters, seasons, years, nodata, outFolder, suffix,
+                iMax, clipRange):
+    # ind is a list of two elements, the first is the season, the second is
+    # the year.
+    
+    # Get the position of the raster for that year and season
+    try:
+        rIndex = zip(seasons, years).index((ind[0], ind[1]))
+    except ValueError:
+        # If that season and year is not there, go to the next pair
+        return None
+    
+    # Import that raster to get the positions of the missing values
+    try:
+        dst = gdal.Open(rasters[rIndex])
+    except RuntimeError, e: 
+        return False
+    
+    # Import that raster to get the positions of the missing values
+    r = dst.GetRasterBand(1).ReadAsArray()
+    
+    nodataOut = dst.GetRasterBand(1).GetNoDataValue()
+    if not nodataOut:
+        nodataOut = nodata[0]
+    
+    # Get the position of all the missing data
+    mps = []
+    
+    for n in nodata:
+        miss = np.where(r == n)
+        mps += map(list, zip(miss[0], miss[1]))
+    
+    # Subset the rasters around the pixels
+    if not nodataOut in nodata:
+        replaceVal = nodata + [nodataOut]
+    else:
+        replaceVal = nodata
+    
+    # Loop through the missing data to replace in r
+    mpsFill = [gapFillOnePixel(pixel=pixel, season=ind[0], year=ind[1],
+                               files=rasters, seasons=seasons,
+                               years=years, replaceVal=replaceVal,
+                               nodataIn=nodata[0], nodataOut=nodataOut,
+                               clipRange=clipRange, iMax=iMax) 
+                               for pixel in mps]
+        
+    # Replace the fitted value in the raster
+    for z in mpsFill:
+        r[z[0], z[1]] = z[4]
+    
+    # Prepare name for output
+    outName = os.path.join(outFolder,
+                           re.sub('.tif', '_' + suffix + '.tif',
+                                 os.path.basename(rasters[rIndex])))
+    
+    if os.path.isfile(outName):
+        os.remove(outName)
+     
+    outR = md.new_raster_from_base(dst, outName,
+                              'GTiff', nodataOut, gdal.GDT_Float32)
+    
+    outR.GetRasterBand(1).WriteArray(r)
+    
+    outR.FlushCache()
+    outR = None
+    dst = None
+>>>>>>> Stashed changes:gapfill_alt_parallel.py
 
 
 def gapFillOnePixel(pixel, season, year, files, seasons, years, replaceVal,
