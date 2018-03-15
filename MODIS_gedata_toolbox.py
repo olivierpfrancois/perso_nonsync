@@ -2,8 +2,6 @@
 # to the run_script function. See the Help for
 # complete information on how to create a script
 # and use Script Runner.
-from mpl_toolkits.axisartist.clip_path import clip
-from numpy import rank
 
 """ 
     Functions to handle the treatment of MODIS images, 
@@ -14,13 +12,12 @@ from numpy import rank
 
 import pymodis as pm
 import re, os
-import multiprocessing as mp
-import pathos.multiprocessing
+#import multiprocessing
+import pathos.multiprocessing as mp
 from datetime import datetime, timedelta
 from osgeo import gdal, gdalconst, ogr
 import numpy as np
-from csv import DictWriter
-import functools, dill
+import functools
 # import warnings
 # warnings.filterwarnings('error')
 

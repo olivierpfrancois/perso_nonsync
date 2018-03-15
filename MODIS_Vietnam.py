@@ -39,13 +39,13 @@ def main():
     # Allow parallel computing?
     allowPara = True
     # Number of cores to use?
-    nCores = 10
+    nCores = 3
     
     # Satellite
-    satelliteModis = 'aqua'  # 'terra' # 'aqua'
+    satelliteModis = 'terra'  # 'terra' # 'aqua'
     
     # Root folder
-    prefixRootSys = '/home/olivierp/jde_coffee'  # '/media/olivier/olivier_ext1/gedata_current/jde_coffee'  # 'E:/gedata_current'   
+    prefixRootSys = '/media/olivier/olivier_ext1/gedata_current/jde_coffee'  # 'E:/gedata_current' #'/home/olivierp/jde_coffee'
     
     # #DIRECTORIES parameters
     # Working directory
@@ -82,11 +82,11 @@ def main():
     # Process decision dummies
     
     # Download images
-    dload = True
+    dload = False
     # Mosaic images for each region and crop to extent 
-    mosaic = True
+    mosaic = False
     # Check quality 
-    checkQuality = True
+    checkQuality = False
     # Fill missing values and mask by exact AOI 
     fillMissing = True
     # Smooth images
@@ -96,7 +96,7 @@ def main():
     # Rank individual images against baseline images
     ranking = False
     # Average MODIS value in each region
-    avgValue = True
+    avgValue = False
     # Compute the quality information to inform the 
     # average values for each region
     qualIndex = True
@@ -119,7 +119,7 @@ def main():
     tiles = ['h28v07']  # ['h28v07']
     # Start date for the product download (format YYYY-MM-DD)
     #    If None, will default to date of most recent MODIS file on disk if any, or stop the process
-    startDownload = '2018-01-01'  # '2017-05-26'
+    startDownload = '2018-01-17'  # '2017-05-26'
     # End date for the product download (format YYYY-MM-DD)
     #    If None, defaults to today
     endDownload = None
@@ -128,7 +128,7 @@ def main():
     # Starting date for the files to mosaic
     #    If None, will default to the files that have been just downloaded if 
     #    any.
-    startMosaic = '2018-01-01'
+    startMosaic = '2018-01-17'
     # startMosaic = '2005-01-01'
     # Ending date for the files to mosaic
     #    If None, defaults to today
@@ -140,7 +140,7 @@ def main():
     # Output folder of the images to mask
     outCheck = statesMaskedFolder
     # Start date for the files to check
-    startCheck = '2018-01-01'
+    startCheck = '2018-01-17'
     # End date for the files to check
     endCheck = None
     
@@ -150,9 +150,9 @@ def main():
     # Output folder for the images to fill
     outMissing = statesFilledFolder
     # Year(s) of images to fill
-    yearsMissing = range(2007, 2019)
+    yearsMissing = [2014,2015,2016,2017,2018]
     # Day(s) of images to fill
-    daysMissing = None  # [[1,17,353],[1,17]]
+    daysMissing = None #[[33,49],[17,33,49]]
     # Suffix to put at the end of the name of the 
     # images after filling
     suffMissing = 'f'
@@ -164,13 +164,13 @@ def main():
     avgWindow = 3
     # Starting date for the files to include as input in the smoothing process
     #    If None, defaults to 1 year before the end smoothing date
-    startSmooth = '2005-01-01'  # '2012-03-01'
+    startSmooth = '2016-05-15'  # '2012-03-01'
     # Ending date for the files to include as input in the smoothing process
     #    If None, defaults to today
     endSmooth = None
     # Start and end dates for the files to save to the disk after smoothing
     #    If None, defaults to 6 months before end smoothing date
-    startSaveS = '2006-01-01'
+    startSaveS = '2017-07-01'
     # startSaveS = '2017-03-01'
     endSaveS = None  # None to save them up to the end smoothing date
     
@@ -191,7 +191,7 @@ def main():
     #    the baselines
     # Starting and ending dates for the images to consider. Included
     #   If None, will default to 60 days before the endRank date
-    startRank = '2016-06-01'
+    startRank = '2017-12-01'
     #   If None, will default to today
     endRank = None
     # Minimum density of coffee to consider 
@@ -331,7 +331,7 @@ def main():
                                     dataToMask=[-3000],
                                     nodataOut=32767),
                       dataset)
-            
+                
             else:
                 for d in dataset:
                     # Mask the low quality pixels
@@ -372,12 +372,12 @@ def main():
             # Get the years for the files on disk
             years = [int(d.strftime('%Y')) for d in datesAll] 
             
-            gapfill.gapFill(rasters=inputRasters, seasons=days, years=years,
+            expans = gapfill.gapFill(rasters=inputRasters, seasons=days, years=years,
                             outFolder=os.path.join(dst, s, outMissing),
-                            suffix=suffMissing, nodata=[-3000], iMax=20,
+                            suffix=suffMissing, nodata=[-3000], iMax=25,
                             subsetSeasons=daysMissing, subsetYears=yearsMissing, subsetMissing=None,
                             clipRange=(-2000, 10000), parallel=allowPara, nCores=nCores)
-            
+            print expans
             # Mask the resulting rasters to the specific extent of the AOI
             for r, y, d in zip(inputRasters, years, days):
                 if (yearsMissing and not y in yearsMissing):
@@ -458,6 +458,7 @@ def main():
             qualityMasked = {}
             qualityFilled = {}
         colnames = []
+        datesAll = []
         
         for r in range(len(states)):
             for v in range(len(varieties[r])):
@@ -474,12 +475,13 @@ def main():
                 else:
                     avgW = None
                 
-                avgRegion = md.computeAvgNdviWrap(
+                avgRegion = md.avgRegionRasterWrap(
                     regionIn=os.path.join(dst, states[r], statesSmoothFolder),
                     avgWeights=avgW,
                     weightField=weightField,
                     startAvg=startAvg, endAvg=endAvg,
                     alltouch=False)
+                
                 '''
                 avgRegion = md.avgRegionQualWrap(
                     regionIn=os.path.join(dst, states[r], statesSmoothFolder),
@@ -512,11 +514,13 @@ def main():
                         missingValue=None,
                         startAvg=startAvg, endAvg=endAvg,
                         alltouch=False)
-                    
+                
                 # Transform the results into a dictionary easier to export
                 for k, s in avgRegion.iteritems():
                     # Transform into 'per Hectare'
                     s = s / (250.) * 10000.
+                    if not k in datesAll:
+                        datesAll.append(k)
                     if not k in averages:
                         averages[k] = {}
                         averages[k]['date'] = k
@@ -542,6 +546,7 @@ def main():
                                 qualityFilled[k][states[r] + '_' + varieties[r][v]] = ' '
         
         # Sort the dates and get min and max
+        datesAll = [datetime.strptime(d, '%Y-%m-%d').date() for d in datesAll]
         datesAll.sort()
         outMin = min(datesAll)
         outMax = max(datesAll)
