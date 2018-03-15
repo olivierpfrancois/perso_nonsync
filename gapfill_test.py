@@ -374,6 +374,8 @@ def gapFillOnePixel(pixel, season, year, files, seasons, years, replaceVal,
                  mp=mp, i=i, initialSize=[5, 5, 1, 3],
                  nodata=replaceVal)
     
+    z = 1500.
+    '''
     # Predict the value
     z = gapPredict(a=a[0], i=i, mp=a[1], nodataIn=nodataIn,
                    nodataOut=nodataOut)
@@ -391,7 +393,7 @@ def gapFillOnePixel(pixel, season, year, files, seasons, years, replaceVal,
         a = aNew
         z = gapPredict(a=a[0], i=i, mp=a[1], nodataIn=nodataIn,
                    nodataOut=nodataOut)
-    
+    '''
     # Clip the value if needed
     if not z == nodataOut:
         z = max(min(z, clipRange[1]), clipRange[0])
