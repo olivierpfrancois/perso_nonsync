@@ -202,7 +202,7 @@ def gapFill(rasters, seasons, years, outFolder, suffix, nodata=None,
         if not os.path.isfile(r):
             return False
     
-    #Check that the season subset has been provided in the right format
+    # Check that the season subset has been provided in the right format
     if not subsetYears:
         subsetYears = set(years)
         subsetYears = list(subsetYears)
@@ -210,7 +210,7 @@ def gapFill(rasters, seasons, years, outFolder, suffix, nodata=None,
         
         if subsetSeasons:
             if any(isinstance(el, list) for el in subsetSeasons):
-                raise ValueError('subsetSeasons should be a simple list of ' +
+                raise ValueError('subsetSeasons should be a simple list of ' + 
                                  'num if subsetYears is None')
             
             subsetSeasons = [subsetSeasons for _ in subsetYears]
@@ -218,10 +218,10 @@ def gapFill(rasters, seasons, years, outFolder, suffix, nodata=None,
     else:
         if subsetSeasons:
             if not len(subsetSeasons) == len(subsetYears):
-                raise ValueError('subsetSeasons should be a list of lists' +
+                raise ValueError('subsetSeasons should be a list of lists' + 
                                  'of the same length as subsetYears')
             if not all(isinstance(el, list) for el in subsetSeasons):
-                raise ValueError('Each element of subsetSeasons should be a list' +
+                raise ValueError('Each element of subsetSeasons should be a list' + 
                                  'with the seasons for that year')
           
     if not subsetSeasons:
@@ -261,7 +261,7 @@ def gapFill(rasters, seasons, years, outFolder, suffix, nodata=None,
         
         p = pmp.Pool(nCores)
     
-    #list to hold the expansion information
+    # list to hold the expansion information
     outI = []
     
     # Loop through all the rasters in the subset to fill the missing values
@@ -272,7 +272,7 @@ def gapFill(rasters, seasons, years, outFolder, suffix, nodata=None,
             try:
                 rIndex = zip(seasons, years).index((s, y))
             except ValueError:
-                #If that season and year is not there, go to the next pair
+                # If that season and year is not there, go to the next pair
                 continue
             
             # Import that raster to get the positions of the missing values
@@ -310,7 +310,7 @@ def gapFill(rasters, seasons, years, outFolder, suffix, nodata=None,
                                     nodataIn=nodata[0], nodataOut=nodataOut,
                                     clipRange=clipRange, iMax=iMax) 
                                            for pixel in mps]
-                print('time gapfillone %s' %(time.time() - t0))
+                print('time gapfillone %s' % (time.time() - t0))
             else:
                 t0 = time.time()
                 pp = functools.partial(gapFillOnePixel, season=s,
@@ -322,7 +322,7 @@ def gapFill(rasters, seasons, years, outFolder, suffix, nodata=None,
                                        clipRange=clipRange, iMax=iMax)
                 
                 mpsFill = p.map(pp, mps)
-                print('time gapfillone parallel %s' %(time.time() - t0))
+                print('time gapfillone parallel %s' % (time.time() - t0))
             # Replace the fitted value in the raster
             for z in mpsFill:
                 r[z[0], z[1]] = z[4]
@@ -343,11 +343,11 @@ def gapFill(rasters, seasons, years, outFolder, suffix, nodata=None,
             outR.FlushCache()
             outR = None
             dst = None
-            print('time export %s' %(time.time() - t0))
-            #Prepare the expansion values for export. These values
-            #provide some information on the difficulty to 
-            #interpolate the pixels
-            outI.append(sum([z[5] for z in mpsFill])/float(len(mpsFill)))
+            print('time export %s' % (time.time() - t0))
+            # Prepare the expansion values for export. These values
+            # provide some information on the difficulty to 
+            # interpolate the pixels
+            outI.append(sum([z[5] for z in mpsFill]) / float(len(mpsFill)))
     
     if parallel:
         # Close the threads
@@ -371,11 +371,11 @@ def gapFillOnePixel(pixel, season, year, files, seasons, years, replaceVal,
     mp = pixel + [season, year]
     
     i = 0 
-    
+    t0 = time.time()
     a = gapSubset(rasters=files, seasons=seasons, years=years,
                  mp=mp, i=i, initialSize=[5, 5, 1, 3],
                  nodata=replaceVal)
-    
+    print('gapSubset %s' % (time.time() - t0))
     z = 1500.
     '''
     # Predict the value
@@ -400,9 +400,9 @@ def gapFillOnePixel(pixel, season, year, files, seasons, years, replaceVal,
     if not z == nodataOut:
         z = max(min(z, clipRange[1]), clipRange[0])
     
-    #Append the new value
+    # Append the new value
     mp.append(z)
-    #Append the iMax value
+    # Append the iMax value
     mp.append(i)
     
     return mp

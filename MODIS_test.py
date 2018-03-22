@@ -38,7 +38,7 @@ def main():
     # #PARAMETERS
     
     # Allow parallel computing?
-    allowPara = True
+    allowPara = False
     # Number of cores to use?
     nCores = 3
     
@@ -46,7 +46,7 @@ def main():
     satelliteModis = 'terra'  # 'terra' # 'aqua'
     
     # Root folder
-    prefixRootSys = '/media/olivier/olivier_ext1/gedata_current/jde_coffee'  #'E:/gedata_current' #'/home/olivierp/jde_coffee'
+    prefixRootSys = '/home/olivierp/jde_coffee'  # '/media/olivier/olivier_ext1/gedata_current/jde_coffee'  #'E:/gedata_current'
     
     # #DIRECTORIES parameters
     # Working directory
@@ -110,7 +110,7 @@ def main():
                                  subsetSeasons=daysMissing, subsetYears=yearsMissing,
                                  subsetMissing=None, clipRange=(-2000, 10000),
                                  parallel=allowPara, nCores=nCores)
-        print ('overall time %s' %(time.time() - t0))
+        print ('overall time %s' % (time.time() - t0))
         # print expans
 
 
