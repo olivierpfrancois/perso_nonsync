@@ -24,7 +24,7 @@ import sys
 sys.dont_write_bytecode = True
 
 import os, re, multiprocessing
-import pathos.multiprocessing as mp
+import pathos.multiprocessing as pmp
 import MODIS_gedata_toolbox as md  # GEDATA toolbox for MODIS related tools
 import gapfill  # Python implementation of the interpolation algorithm
 from datetime import datetime
@@ -348,7 +348,7 @@ def main():
             dataset = zip(allNDVI, allQuality, allOut)
             
             if allowPara:
-                p = mp.Pool(nCores)
+                p = pmp.Pool(nCores)
                 
                 p.map(lambda d: md.maskQualityVI(ndviRaster=d[0],
                                                  qualityRaster=d[1],
@@ -427,7 +427,7 @@ def main():
                             clipRange=(-2000, 10000), maskRaster=avgW, 
                             parallel=allowPara, nCores=nCores)
             
-            with open("/home/olivier/Desktop/testBrazil.csv", "wb") as f:
+            with open(dst+"/testBrazil.csv", "wb") as f:
                 exp = writer(f)
                 exp.writerows(expans)
                 

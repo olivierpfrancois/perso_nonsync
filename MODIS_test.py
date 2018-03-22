@@ -38,15 +38,15 @@ def main():
     # #PARAMETERS
     
     # Allow parallel computing?
-    allowPara = True
+    allowPara = False
     # Number of cores to use?
-    nCores = 5
+    nCores = 3
     
     # Satellite
     satelliteModis = 'terra'  # 'terra' # 'aqua'
     
     # Root folder
-    prefixRootSys = '/home/olivierp/jde_coffee'  # '/media/olivier/olivier_ext1/gedata_current/jde_coffee'  #'E:/gedata_current'
+    prefixRootSys = '/media/olivier/olivier_ext1/gedata_current/jde_coffee'  #'E:/gedata_current' #'/home/olivierp/jde_coffee'
     
     # #DIRECTORIES parameters
     # Working directory

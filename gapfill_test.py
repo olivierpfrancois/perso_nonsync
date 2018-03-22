@@ -8,7 +8,7 @@ import pandas as pd
 import statsmodels.formula.api as smf
 import MODIS_gedata_toolbox as md
 import os, re, multiprocessing
-import pathos.multiprocessing as mp
+import pathos.multiprocessing as pmp
 import functools
 
 
@@ -259,7 +259,7 @@ def gapFill(rasters, seasons, years, outFolder, suffix, nodata=None,
         if not nCores:
             nCores = multiprocessing.cpu_count()
         
-        p = mp.Pool(nCores)
+        p = pmp.Pool(nCores)
     
     #list to hold the expansion information
     outI = []
