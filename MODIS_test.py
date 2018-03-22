@@ -26,9 +26,10 @@ sys.dont_write_bytecode = True
 import os, re, multiprocessing
 import pathos.multiprocessing as mp
 import MODIS_gedata_toolbox as md  # GEDATA toolbox for MODIS related tools
-import gapfill  # Python implementation of the interpolation algorithm
+import gapfill_test  # Python implementation of the interpolation algorithm
 from datetime import datetime
 from csv import DictWriter
+import time
 
 
 def main():
@@ -39,13 +40,13 @@ def main():
     # Allow parallel computing?
     allowPara = True
     # Number of cores to use?
-    nCores = 3
+    nCores = 5
     
     # Satellite
     satelliteModis = 'terra'  # 'terra' # 'aqua'
     
     # Root folder
-    prefixRootSys = '/media/olivier/olivier_ext1/gedata_current/jde_coffee'  #'E:/gedata_current' #'/home/olivierp/jde_coffee'
+    prefixRootSys = '/home/olivierp/jde_coffee'  # '/media/olivier/olivier_ext1/gedata_current/jde_coffee'  #'E:/gedata_current'
     
     # #DIRECTORIES parameters
     # Working directory
@@ -54,12 +55,11 @@ def main():
     # #REGIONS parameters
     # Regions to process inputs    !!!!SHOULD BE IN EPSG 4326 PROJECTION
     # Names of the regions (also folders names) 
-    states = "CER" #["CER", "CHA", "CO", "ES", "MO", "SDM", "SP", "ZM"]
+    states = ["CER"]  # ["CER", "CHA", "CO", "ES", "MO", "SDM", "SP", "ZM"]
     # Name of the subfolder where to save the masked images
     statesMaskedFolder = 'masked_missing'
     # Name of the subfolder where to save the filled images
     statesFilledFolder = 'test_speed_filling'
-    
     
     ############ FILL MISSING
     # Input folder for the images to fill
@@ -69,12 +69,11 @@ def main():
     # Year(s) of images to fill
     yearsMissing = [2018]
     # Day(s) of images to fill
-    daysMissing = [[1, 17, 33, 49]]
+    daysMissing = [[33, 49]]
     # Suffix to put at the end of the name of the 
     # images after filling
     suffMissing = 'f'
     # !!! The two conditions are additive (AND)    
-
     
     #####################################################################################################################
     #####################################################################################################################
@@ -104,14 +103,15 @@ def main():
         
         # Get the years for the files on disk
         years = [int(d.strftime('%Y')) for d in datesAll] 
-        
-        expans = gapfill.gapFill(rasters=inputRasters, seasons=days, years=years,
+        t0 = time.time()
+        expans = gapfill_test.gapFill(rasters=inputRasters, seasons=days, years=years,
                                  outFolder=os.path.join(dst, s, outMissing),
                                  suffix=suffMissing, nodata=[-3000], iMax=20,
-                                 subsetSeasons=daysMissing, subsetYears=yearsMissing, 
-                                 subsetMissing=None, clipRange=(-2000, 10000), 
+                                 subsetSeasons=daysMissing, subsetYears=yearsMissing,
+                                 subsetMissing=None, clipRange=(-2000, 10000),
                                  parallel=allowPara, nCores=nCores)
-        print expans
+        print time.time() - t0
+        # print expans
 
 
 if __name__ == '__main__':
