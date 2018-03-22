@@ -435,7 +435,12 @@ def gapFillTest(rasters, seasons, years, outFolder, suffix,
     except RuntimeError, e: 
         return False
     
+    #Transform into array
     a = dst.GetRasterBand(1).ReadAsArray()
+    
+    #Get the no data value
+    nodataDst = dst.GetRasterBand(1).GetNoDataValue()
+    
     if not subsetMissing:
         # Import one band to get the array size
         subsetMissing = np.ones(a.shape, dtype=np.int)
@@ -444,7 +449,7 @@ def gapFillTest(rasters, seasons, years, outFolder, suffix,
             return False
     
     if not nodata:
-        nodata = dst.GetRasterBand(1).GetNoDataValue()
+        nodata = nodataDst
     
     if not nodata:
         return False
@@ -452,31 +457,44 @@ def gapFillTest(rasters, seasons, years, outFolder, suffix,
     if type(nodata) is int or nodata == np.nan:
         nodata = [nodata]
     
-    dst = None
-    a = None
     
+    
+    #Import the weight information if provided
+    if not maskRaster:
+        if nodata == nodataDst:
+            #Get the total number of pixels
+            totW = [dst.RasterXSize*dst.RasterYSize]
+        else:
+            #Get the number of pixels that are not no data in the raster
+            totW = [np.sum(a != nodataDst)]
+        a = None
+    else:
+        a = None
+        if isinstance(maskRaster, basestring):
+            maskRaster = list(maskRaster)
+        try:
+            masks = [gdal.Open(r) for r in maskRaster]
+            wr = [r.GetRasterBand(1).ReadAsArray() for r in masks]
+            nodataR = [r.GetRasterBand(1).GetNoDataValue() for r in masks]
+            masks = [None for _ in masks]
+            
+            for r in range(len(wr)):
+                wr[r][np.logical_or(wr[r] == nodataR[r], np.logical_or(wr[r]>1, wr[r]<0))] = 0.
+            
+            #Get the total of the mask values
+            totW = [np.nansum(r) for r in wr]
+            
+        except RuntimeError: 
+            return False
+    
+    dst = None
+        
     if parallel:
         if not nCores:
             nCores = multiprocessing.cpu_count()
         
         p = mp.Pool(nCores)
-    
-    #Import the weight information if provided
-    if maskRaster:
-        try:
-            dst = gdal.Open(maskRaster)
-            wr = dst.GetRasterBand(1).ReadAsArray()
-            nodataR = dst.GetRasterBand(1).GetNoDataValue()
-            dst = None
-            
-            wr[np.logical_or(wr == nodataR, np.logical_or(wr>1, wr<0))] = 0.
-            
-            #Get the total of the mask values
-            totW = np.nansum(wr)
-            print totW
-        except RuntimeError: 
-            return False
-    
+        
     #list to hold the expansion information
     outI = []
     
@@ -494,7 +512,7 @@ def gapFillTest(rasters, seasons, years, outFolder, suffix,
             # Import that raster to get the positions of the missing values
             try:
                 dst = gdal.Open(rasters[rIndex])
-            except RuntimeError, e: 
+            except RuntimeError: 
                 return False
             
             # Import that raster to get the positions of the missing values
@@ -513,9 +531,9 @@ def gapFillTest(rasters, seasons, years, outFolder, suffix,
             
             #Get the mask value for each of the missing pixels
             if maskRaster:
-                w = [wr[z[0],z[1]] for z in mps]
+                w = [[rr[z[0],z[1]] for z in mps] for rr in wr]
             else:
-                w = [1 for _ in mps]
+                w = [[1 for _ in mps]]
             
             # Subset the rasters around the pixels
             if not nodataOut in nodata:
@@ -568,10 +586,11 @@ def gapFillTest(rasters, seasons, years, outFolder, suffix,
             #provide some information on the difficulty to 
             #interpolate the pixels
             temp = []
-            for i in range(0,11):
-                #Get the total weight in the mask for expansion above a certain value
-                temp1 = [z[5]>i for z in mpsFill]
-                temp.append(sum([a*b for a,b in zip(temp1, w)])/totW)
+            for m in range(len(w)):
+                for i in range(0,11):
+                    #Get the total weight in the mask for expansion above a certain value
+                    temp1 = [z[5]>i for z in mpsFill]
+                    temp.append(sum([a*b for a,b in zip(temp1, w[m])])/totW[m])
             #alternative: simple average of the expansion factors
             #sum([z[5] for z in mpsFill])/float(len(mpsFill))
             outI.append(temp)

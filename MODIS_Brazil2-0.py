@@ -149,7 +149,7 @@ def main():
     # Year(s) of images to fill
     yearsMissing = [2018]
     # Day(s) of images to fill
-    daysMissing = [[1,17,33, 49]]
+    daysMissing = [[49]]
     # Suffix to put at the end of the name of the 
     # images after filling
     suffMissing = 'f'
@@ -390,7 +390,7 @@ def main():
         
         for s, b in zip(range(len(states)), statesBoundFiles):
             print('   Starting region ' + states[s])
-            if not s==6:
+            if not s==3:
                 continue
             inputRasters = [os.path.join(dst, states[s], inMissing, f) for 
                             f in os.listdir(os.path.join(dst, states[s], inMissing)) 
@@ -417,7 +417,7 @@ def main():
                                      parallel=allowPara, nCores=nCores)
             '''
             if avgWeights[s]:
-                avgW = avgWeights[s][0]
+                avgW = avgWeights[s]
             else:
                 avgW = None
             expans = gapfill.gapFillTest(rasters=inputRasters, seasons=days, years=years,
@@ -427,7 +427,7 @@ def main():
                             clipRange=(-2000, 10000), maskRaster=avgW, 
                             parallel=allowPara, nCores=nCores)
             
-            with open(dst+"/testBrazil.csv", "wb") as f:
+            with open(dst+"/test"+states[s]+".csv", "wb") as f:
                 exp = writer(f)
                 exp.writerows(expans)
                 
