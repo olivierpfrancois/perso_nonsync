@@ -254,6 +254,7 @@ def gapFill(rasters, seasons, years, outFolder, suffix, nodata=None,
         nodata = [nodata]
     
     dst = None
+    a = None
     
     if parallel:
         if not nCores:
@@ -355,6 +356,234 @@ def gapFill(rasters, seasons, years, outFolder, suffix, nodata=None,
     return outI
 
 
+def gapFillTest(rasters, seasons, years, outFolder, suffix, 
+                nodata=None, iMax=np.inf,
+                subsetSeasons=None, subsetYears=None, subsetMissing=None,
+                clipRange=(-np.inf, np.inf), maskRaster=None, 
+                parallel=False, nCores=None):
+    '''
+    Function to fill missing values in a series of rasters
+    
+    rasters (list): list of raster addresses
+    seasons (list): Same size as rasters, gives for each the season. 
+        Seasons should be numeric and in order by year. 
+    years (list): Same size as rasters, gives for each the year.
+        Years should be numeric and in order.
+    outFolder (string): Address of output directory
+    suffix (string): suffix to append to the name of the rasters after filling
+    nodata (single num or list): Value to consider as no data in the rasters. 
+        If None, will use the no data value in the raster if any
+    fnSubset (function): function to use to subset the rasters
+    fnPredict (function): function to use to predict the missing values. 
+        The function should only return one element at a time
+    iMax (int): Maximum number of iterations until missing is 
+        returned as a predicted value
+    subsetSeasons (list of lists): list or list of lists of seasons for which to 
+        predict missing values. 
+        It should be a list of num if seubsetYears is None.
+        It should be a list of lists with one liet per year in subsetYears.
+        If None, all seasons are considered. Works as AND condition with 
+        subsetYears.
+    subsetYears (list): list of years for which to predict missing values.
+        If None, all years are considered. Works as AND condition with 
+        subsetSeasons
+    subsetMissing (logical array): Array of the same size as the rasters, 
+        providing a subset of locations in which to consider missing values. 
+        The same subset will be used for all seasons and all years.
+    clipRange (tuple of length 2): Specifies the lower and the upper bound of the filled
+        data. Values outside this range are clipped accordingly
+        
+    '''
+    
+    # Check the inputs
+    
+    for r in rasters:
+        if not os.path.isfile(r):
+            return False
+    
+    #Check that the season subset has been provided in the right format
+    if not subsetYears:
+        subsetYears = set(years)
+        subsetYears = list(subsetYears)
+        subsetYears.sort()
+        
+        if subsetSeasons:
+            if any(isinstance(el, list) for el in subsetSeasons):
+                raise ValueError('subsetSeasons should be a simple list of ' +
+                                 'num if subsetYears is None')
+            
+            subsetSeasons = [subsetSeasons for _ in subsetYears]
+        
+    else:
+        if subsetSeasons:
+            if not len(subsetSeasons) == len(subsetYears):
+                raise ValueError('subsetSeasons should be a list of lists' +
+                                 'of the same length as subsetYears')
+            if not all(isinstance(el, list) for el in subsetSeasons):
+                raise ValueError('Each element of subsetSeasons should be a list' +
+                                 'with the seasons for that year')
+          
+    if not subsetSeasons:
+        subsetSeasons = set(seasons)
+        subsetSeasons = list(subsetSeasons)
+        subsetSeasons.sort()
+        subsetSeasons = [subsetSeasons for _ in subsetYears]
+    
+    # Import one band to get the array size
+    try:
+        dst = gdal.Open(rasters[0])
+    except RuntimeError, e: 
+        return False
+    
+    a = dst.GetRasterBand(1).ReadAsArray()
+    if not subsetMissing:
+        # Import one band to get the array size
+        subsetMissing = np.ones(a.shape, dtype=np.int)
+    else:
+        if not a.shape == subsetMissing.shape:
+            return False
+    
+    if not nodata:
+        nodata = dst.GetRasterBand(1).GetNoDataValue()
+    
+    if not nodata:
+        return False
+    
+    if type(nodata) is int or nodata == np.nan:
+        nodata = [nodata]
+    
+    dst = None
+    a = None
+    
+    if parallel:
+        if not nCores:
+            nCores = multiprocessing.cpu_count()
+        
+        p = mp.Pool(nCores)
+    
+    #Import the weight information if provided
+    if maskRaster:
+        try:
+            dst = gdal.Open(maskRaster)
+            wr = dst.GetRasterBand(1).ReadAsArray()
+            nodataR = dst.GetRasterBand(1).GetNoDataValue()
+            dst = None
+            
+            wr[np.logical_or(wr == nodataR, np.logical_or(wr>1, wr<0))] = 0.
+            
+            #Get the total of the mask values
+            totW = np.nansum(wr)
+            print totW
+        except RuntimeError: 
+            return False
+    
+    #list to hold the expansion information
+    outI = []
+    
+    # Loop through all the rasters in the subset to fill the missing values
+    for y, S in zip(subsetYears, subsetSeasons):
+        for s in S:
+            
+            # Get the position of the raster for that year and season
+            try:
+                rIndex = zip(seasons, years).index((s, y))
+            except ValueError:
+                #If that season and year is not there, go to the next pair
+                continue
+            
+            # Import that raster to get the positions of the missing values
+            try:
+                dst = gdal.Open(rasters[rIndex])
+            except RuntimeError, e: 
+                return False
+            
+            # Import that raster to get the positions of the missing values
+            r = dst.GetRasterBand(1).ReadAsArray()
+            
+            nodataOut = dst.GetRasterBand(1).GetNoDataValue()
+            if not nodataOut:
+                nodataOut = nodata[0]
+            
+            # Get the position of all the missing data
+            mps = []
+            
+            for n in nodata:
+                miss = np.where(r == n)
+                mps += map(list, zip(miss[0], miss[1]))
+            
+            #Get the mask value for each of the missing pixels
+            if maskRaster:
+                w = [wr[z[0],z[1]] for z in mps]
+            else:
+                w = [1 for _ in mps]
+            
+            # Subset the rasters around the pixels
+            if not nodataOut in nodata:
+                replaceVal = nodata + [nodataOut]
+            else:
+                replaceVal = nodata[0]
+            
+            # Loop through the missing data to replace in r
+            if not parallel:
+                mpsFill = [gapFillOnePixel(pixel=pixel, season=s, year=y,
+                                    files=rasters, seasons=seasons,
+                                    years=years, replaceVal=replaceVal,
+                                    nodataIn=nodata[0], nodataOut=nodataOut,
+                                    clipRange=clipRange, iMax=iMax) 
+                                           for pixel in mps]
+            
+            else:
+                pp = functools.partial(gapFillOnePixel, season=s,
+                                       year=y, files=rasters,
+                                       seasons=seasons, years=years,
+                                       replaceVal=replaceVal,
+                                       nodataIn=nodata[0],
+                                       nodataOut=nodataOut,
+                                       clipRange=clipRange, iMax=iMax)
+                
+                mpsFill = p.map(pp, mps)
+                
+            # Replace the fitted value in the raster
+            for z in mpsFill:
+                r[z[0], z[1]] = z[4]
+            
+            # Prepare name for output
+            outName = os.path.join(outFolder,
+                                   re.sub('.tif', '_' + suffix + '.tif',
+                                         os.path.basename(rasters[rIndex])))
+            
+            if os.path.isfile(outName):
+                os.remove(outName)
+             
+            outR = md.new_raster_from_base(dst, outName,
+                                      'GTiff', nodataOut, gdal.GDT_Float32)
+            
+            outR.GetRasterBand(1).WriteArray(r)
+            
+            outR.FlushCache()
+            outR = None
+            dst = None
+            
+            #Prepare the expansion values for export. These values
+            #provide some information on the difficulty to 
+            #interpolate the pixels
+            temp = []
+            for i in range(0,11):
+                #Get the total weight in the mask for expansion above a certain value
+                temp1 = [z[5]>i for z in mpsFill]
+                temp.append(sum([a*b for a,b in zip(temp1, w)])/totW)
+            #alternative: simple average of the expansion factors
+            #sum([z[5] for z in mpsFill])/float(len(mpsFill))
+            outI.append(temp)
+    
+    if parallel:
+        # Close the threads
+        p.close()
+        p.join()
+    
+    return outI
+
+
 def gapFillOnePixel(pixel, season, year, files, seasons, years, replaceVal,
                     nodataIn, nodataOut, clipRange, iMax):
     '''
@@ -371,7 +600,7 @@ def gapFillOnePixel(pixel, season, year, files, seasons, years, replaceVal,
     i = 0 
     
     a = gapSubset(rasters=files, seasons=seasons, years=years,
-                 mp=mp, i=i, initialSize=[5, 5, 1, 3],
+                 mp=mp, i=i, initialSize=[3, 3, 1, 3],
                  nodata=replaceVal)
     
     # Predict the value
@@ -382,7 +611,7 @@ def gapFillOnePixel(pixel, season, year, files, seasons, years, replaceVal,
         i += 1
         
         aNew = gapSubset(rasters=files, seasons=seasons, years=years,
-                        mp=mp, i=i, initialSize=[5, 5, 1, 3],
+                        mp=mp, i=i, initialSize=[3, 3, 1, 3],
                         nodata=replaceVal)
         if aNew[0].shape == a[0].shape:
             break

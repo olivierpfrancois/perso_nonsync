@@ -328,7 +328,7 @@ def clipMaskRasterByShp(shp, raster, outRaster, clipR=True, maskR=True,
     
     shp (str): Full address of the shapefile to clip
     raster (str): Full address of the raster to be clipped.
-    outRaster (str): Full adress of the output raster
+    outRaster (str): Full address of the output raster
     clipR (bool): Whether the image should be clipped by the shapefile
     maskR (bool): Whether the image should be masked by the shapefile
     dataToMask (list): Optional list of values of the data to mask. 
@@ -431,11 +431,10 @@ def clipMaskRasterByShp(shp, raster, outRaster, clipR=True, maskR=True,
         new = new_raster.GetRasterBand(1).ReadAsArray().astype(np.float)
         
         # Mask the values outside the shapefile
+        clip[new == nodataImg] = nodataImg
         if dataToMask:
             for d in dataToMask:
-                clip[(new == nodataImg) & (clip == d)] = nodataImg
-        else:
-            clip[new == nodataImg] = nodataImg
+                clip[clip == d] = nodataImg
     
     image = None
     
@@ -456,8 +455,6 @@ def clipMaskRasterByShp(shp, raster, outRaster, clipR=True, maskR=True,
     # out = subprocess.call(['/usr/bin/gdalwarp', '-q', '-overwrite', '-cutline', shp, '-crop_to_cutline', 
     #                       '-of GTIFF', '-co BIGTIFF=IF_NEEDED', inRaster, outRaster])
     # print(out)
-    
-    image = None
 
 
 def smoothMODISWrapper(root, regions, regionsIn, regionsOut, startSmooth, endSmooth, regWindow, avgWindow,

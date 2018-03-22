@@ -28,7 +28,7 @@ import pathos.multiprocessing as mp
 import MODIS_gedata_toolbox as md  # GEDATA toolbox for MODIS related tools
 import gapfill  # Python implementation of the interpolation algorithm
 from datetime import datetime
-from csv import DictWriter
+from csv import DictWriter, writer
 
 
 def main():
@@ -89,7 +89,7 @@ def main():
     # Check quality 
     checkQuality = False
     # Fill missing values and mask by exact AOI 
-    fillMissing = False
+    fillMissing = True
     # Smooth images
     smooth = False
     # Create baselines
@@ -97,7 +97,7 @@ def main():
     # Rank individual images against baseline images
     ranking = False
     # Average MODIS value in each region
-    avgValue = True
+    avgValue = False
     # Compute the quality information to inform the 
     # average values for each region
     qualIndex = True
@@ -149,7 +149,7 @@ def main():
     # Year(s) of images to fill
     yearsMissing = [2018]
     # Day(s) of images to fill
-    daysMissing = [[33, 49]]
+    daysMissing = [[1,17,33, 49]]
     # Suffix to put at the end of the name of the 
     # images after filling
     suffMissing = 'f'
@@ -388,11 +388,12 @@ def main():
     if fillMissing:
         print('Starting interpolation of missing values')
         
-        for s, b in zip(states, statesBoundFiles):
-            print('   Starting region ' + s)
-            
-            inputRasters = [os.path.join(dst, s, inMissing, f) for 
-                            f in os.listdir(os.path.join(dst, s, inMissing)) 
+        for s, b in zip(range(len(states)), statesBoundFiles):
+            print('   Starting region ' + states[s])
+            if not s==6:
+                continue
+            inputRasters = [os.path.join(dst, states[s], inMissing, f) for 
+                            f in os.listdir(os.path.join(dst, states[s], inMissing)) 
                             if f.endswith('.tif')]
             
             inputRasters.sort()
@@ -407,14 +408,29 @@ def main():
             
             # Get the years for the files on disk
             years = [int(d.strftime('%Y')) for d in datesAll] 
-            
+            '''
             expans = gapfill.gapFill(rasters=inputRasters, seasons=days, years=years,
-                                     outFolder=os.path.join(dst, s, outMissing),
+                                     outFolder=os.path.join(dst, states[s], outMissing),
                                      suffix=suffMissing, nodata=[-3000], iMax=20,
                                      subsetSeasons=daysMissing, subsetYears=yearsMissing, 
                                      subsetMissing=None, clipRange=(-2000, 10000), 
                                      parallel=allowPara, nCores=nCores)
-            print expans
+            '''
+            if avgWeights[s]:
+                avgW = avgWeights[s][0]
+            else:
+                avgW = None
+            expans = gapfill.gapFillTest(rasters=inputRasters, seasons=days, years=years,
+                            outFolder=os.path.join(dst, states[s], outMissing),
+                            suffix=suffMissing, nodata=[-3000], iMax=27,
+                            subsetSeasons=daysMissing, subsetYears=yearsMissing, subsetMissing=None,
+                            clipRange=(-2000, 10000), maskRaster=avgW, 
+                            parallel=allowPara, nCores=nCores)
+            
+            with open("/home/olivier/Desktop/testBrazil.csv", "wb") as f:
+                exp = writer(f)
+                exp.writerows(expans)
+                
             # Mask the resulting rasters to the specific extent of the AOI
             for r, y, d in zip(inputRasters, years, days):
                 if (yearsMissing and not y in yearsMissing):
@@ -425,7 +441,7 @@ def main():
                 elif not yearsMissing and daysMissing and not d in daysMissing:
                     continue
                 
-                nameR = os.path.join(dst, s, outMissing,
+                nameR = os.path.join(dst, states[s], outMissing,
                                      re.sub('.tif', '_' + suffMissing + '.tif',
                                             os.path.basename(r)))
                 
