@@ -9,7 +9,7 @@ import statsmodels.formula.api as smf
 import MODIS_gedata_toolbox as md
 import os, re, multiprocessing
 import pathos.multiprocessing as pmp
-import functools
+import functools, time
 
 
 def array2TwoDim(a):
@@ -303,14 +303,16 @@ def gapFill(rasters, seasons, years, outFolder, suffix, nodata=None,
             
             # Loop through the missing data to replace in r
             if not parallel:
+                t0 = time.time()
                 mpsFill = [gapFillOnePixel(pixel=pixel, season=s, year=y,
                                     files=rasters, seasons=seasons,
                                     years=years, replaceVal=replaceVal,
                                     nodataIn=nodata[0], nodataOut=nodataOut,
                                     clipRange=clipRange, iMax=iMax) 
                                            for pixel in mps]
-            
+                print('time gapfillone %s' %(time.time() - t0))
             else:
+                t0 = time.time()
                 pp = functools.partial(gapFillOnePixel, season=s,
                                        year=y, files=rasters,
                                        seasons=seasons, years=years,
@@ -320,7 +322,7 @@ def gapFill(rasters, seasons, years, outFolder, suffix, nodata=None,
                                        clipRange=clipRange, iMax=iMax)
                 
                 mpsFill = p.map(pp, mps)
-                
+                print('time gapfillone parallel %s' %(time.time() - t0))
             # Replace the fitted value in the raster
             for z in mpsFill:
                 r[z[0], z[1]] = z[4]
@@ -332,7 +334,7 @@ def gapFill(rasters, seasons, years, outFolder, suffix, nodata=None,
             
             if os.path.isfile(outName):
                 os.remove(outName)
-             
+            t0 = time.time()
             outR = md.new_raster_from_base(dst, outName,
                                       'GTiff', nodataOut, gdal.GDT_Float32)
             
@@ -341,7 +343,7 @@ def gapFill(rasters, seasons, years, outFolder, suffix, nodata=None,
             outR.FlushCache()
             outR = None
             dst = None
-            
+            print('time export %s' %(time.time() - t0))
             #Prepare the expansion values for export. These values
             #provide some information on the difficulty to 
             #interpolate the pixels

@@ -38,7 +38,7 @@ def main():
     # #PARAMETERS
     
     # Allow parallel computing?
-    allowPara = False
+    allowPara = True
     # Number of cores to use?
     nCores = 3
     
@@ -69,7 +69,7 @@ def main():
     # Year(s) of images to fill
     yearsMissing = [2018]
     # Day(s) of images to fill
-    daysMissing = [[33, 49]]
+    daysMissing = [[33]]
     # Suffix to put at the end of the name of the 
     # images after filling
     suffMissing = 'f'
@@ -110,7 +110,7 @@ def main():
                                  subsetSeasons=daysMissing, subsetYears=yearsMissing,
                                  subsetMissing=None, clipRange=(-2000, 10000),
                                  parallel=allowPara, nCores=nCores)
-        print time.time() - t0
+        print ('overall time %s' %(time.time() - t0))
         # print expans
 
 
