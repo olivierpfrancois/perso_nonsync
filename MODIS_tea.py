@@ -47,9 +47,9 @@ def main():
     
     # #DIRECTORIES parameters
     # Working directory
-    dst = os.path.join(prefixRootSys, 'MODIS/collection6/' + satelliteModis + '/Brazil')
+    dst = os.path.join(prefixRootSys, 'MODIS/collection6/' + satelliteModis + '/Tea')
     # Directory data sources
-    dataDir = os.path.join(prefixRootSys, 'data/Brazil')
+    dataDir = os.path.join(prefixRootSys, 'MODIS/collection6/' + satelliteModis + '/Tea/data')
     # Folder inside dst to use for temporary files (should be empty)
     tempDir = os.path.join(prefixRootSys, 'Temp')
     # Destination folder for the downloaded MODIS tiles
@@ -58,7 +58,7 @@ def main():
     # #REGIONS parameters
     # Regions to process inputs    !!!!SHOULD BE IN EPSG 4326 PROJECTION
     # Names of the regions (also folders names) 
-    states = ["CER", "CHA", "CO", "ES", "MO", "SDM", "SP", "ZM"]
+    states = ["SLK"]
     # Varieties in each case
     varieties = [['arabica'], ['arabica'], ['arabica'], ['arabica', 'robusta'],
                  ['arabica'], ['arabica'], ['arabica'], ['arabica', 'robusta']]
@@ -81,11 +81,11 @@ def main():
     # Process decision dummies
     
     # Download images
-    dload = False
+    dload = True
     # Mosaic images for each region and crop to extent 
-    mosaic = False
+    mosaic = True
     # Check quality 
-    checkQuality = False
+    checkQuality = True
     # Fill missing values and mask by exact AOI 
     fillMissing = True
     # Smooth images
@@ -114,10 +114,10 @@ def main():
     # Password for the earthdata website
     pwd = "Michele1950"
     # Tiles to download.
-    tiles = ['h13v10', 'h13v11', 'h14v10', 'h14v11']  # ['h28v07']
+    tiles = ['h25v08', 'h26v08']
     # Start date for the product download (format YYYY-MM-DD)
     #    If None, will default to date of most recent MODIS file on disk if any, or stop the process
-    startDownload = '2018-03-01'
+    startDownload = '2005-01-01'
     # End date for the product download (format YYYY-MM-DD)
     #    If None, defaults to today
     endDownload = None
@@ -126,7 +126,7 @@ def main():
     # Starting date for the files to mosaic
     #    If None, will default to the files that have been just downloaded if 
     #    any.
-    startMosaic = '2018-03-01'  # '2017-02-01'
+    startMosaic = '2005-01-01'  # '2017-02-01'
     # startMosaic = '2005-01-01'
     # Ending date for the files to mosaic
     #    If None, defaults to today
@@ -138,7 +138,7 @@ def main():
     # Output folder of the images to mask
     outCheck = statesMaskedFolder
     # Start date for the files to check
-    startCheck = '2018-03-01'
+    startCheck = '2005-01-01'
     # End date for the files to check
     endCheck = None
     
