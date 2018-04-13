@@ -1,8 +1,3 @@
-# Customize this starter script by adding code
-# to the run_script function. See the Help for
-# complete information on how to create a script
-# and use Script Runner.
-
 """ 
     Script to download MODIS images from the server, 
     and mosaic the images and mask them for each region
@@ -16,6 +11,9 @@
     4- Fill missing values
     5- Mask the image to only keep the pixels of interest
     6- Smooth the images temporally
+    7- Compute reference rasters with decile values
+    8- Compute rasters showing position of each pixel compared to reference deciles
+    9- Compute averages by AOI
     
 """
 
@@ -98,9 +96,12 @@ def main():
     ranking = False
     # Average MODIS value in each region
     avgValue = False
+    #Additional options with the average
     # Compute the quality information to inform the 
     # average values for each region
     qualIndex = True
+    #Create charts of the differential to the long term
+    chartDiff = True
     
     ########### DOWNLOAD
     # Product to download
@@ -116,7 +117,7 @@ def main():
     tiles = ['h13v10', 'h13v11', 'h14v10', 'h14v11']  # ['h28v07']
     # Start date for the product download (format YYYY-MM-DD)
     #    If None, will default to date of most recent MODIS file on disk if any, or stop the process
-    startDownload = '2017-02-01'
+    startDownload = '2018-03-01'
     # End date for the product download (format YYYY-MM-DD)
     #    If None, defaults to today
     endDownload = None
@@ -125,7 +126,7 @@ def main():
     # Starting date for the files to mosaic
     #    If None, will default to the files that have been just downloaded if 
     #    any.
-    startMosaic = '2018-01-01'  # '2017-02-01'
+    startMosaic = '2018-03-01'  # '2017-02-01'
     # startMosaic = '2005-01-01'
     # Ending date for the files to mosaic
     #    If None, defaults to today
@@ -137,7 +138,7 @@ def main():
     # Output folder of the images to mask
     outCheck = statesMaskedFolder
     # Start date for the files to check
-    startCheck = '2018-01-01'
+    startCheck = '2018-03-01'
     # End date for the files to check
     endCheck = None
     
@@ -147,9 +148,9 @@ def main():
     # Output folder for the images to fill
     outMissing = statesFilledFolder
     # Year(s) of images to fill
-    yearsMissing = [2018]
+    yearsMissing = [2017,2018]
     # Day(s) of images to fill
-    daysMissing = [[49]]
+    daysMissing = None #[[49,65,81]]
     # Suffix to put at the end of the name of the 
     # images after filling
     suffMissing = 'f'
@@ -161,13 +162,13 @@ def main():
     avgWindow = 3
     # Starting date for the files to include as input in the smoothing process
     #    If None, defaults to 1 year before the end smoothing date
-    startSmooth = '2016-05-15'  # '2012-03-01'
+    startSmooth = '2016-06-15'  # '2012-03-01'
     # Ending date for the files to include as input in the smoothing process
     #    If None, defaults to today
     endSmooth = None
     # Start and end dates for the files to save to the disk after smoothing
     #    If None, defaults to 6 months before end smoothing date
-    startSaveS = '2017-07-01'
+    startSaveS = '2017-08-01'
     # startSaveS = '2017-03-01'
     endSaveS = None  # None to save them up to the end smoothing date
     
@@ -206,7 +207,7 @@ def main():
     #    the baselines
     # Starting and ending dates for the images to consider. Included
     #   If None, will default to 60 days before the endRank date
-    startRank = '2017-12-01'
+    startRank = '2017-12-15'
     #   If None, will default to today
     endRank = None
     # Minimum density of coffee to consider 
@@ -390,7 +391,7 @@ def main():
         
         for s, b in zip(range(len(states)), statesBoundFiles):
             print('   Starting region ' + states[s])
-            if not s==3:
+            if not s>4:
                 continue
             inputRasters = [os.path.join(dst, states[s], inMissing, f) for 
                             f in os.listdir(os.path.join(dst, states[s], inMissing)) 
@@ -642,6 +643,14 @@ def main():
                     for p in outF:
                         dict_writer.writerow(p)
 
-
+        if chartDiff:
+            #Remove the date from the variables in averages
+            for v in averages.itervalues():
+                v.pop('date', None)
+            #Create the plots
+            md.plotModisLtavg(inDic=averages, ltAvgStart=2006, ltAvgEnd=2016, 
+                              dateStartChart='07-01', yearsPlot=range(2009,2019), 
+                              outFolder=dst)
+            
 if __name__ == '__main__':
     main()

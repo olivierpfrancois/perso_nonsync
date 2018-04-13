@@ -1,8 +1,3 @@
-# Customize this starter script by adding code
-# to the run_script function. See the Help for
-# complete information on how to create a script
-# and use Script Runner.
-
 """ 
     Script to download MODIS images from the server, 
     and mosaic the images and mask them for each region
@@ -16,6 +11,9 @@
     4- Fill missing values
     5- Mask the image to only keep the pixels of interest
     6- Smooth the images temporally
+    7- Compute reference rasters with decile values
+    8- Compute rasters showing position of each pixel compared to reference deciles
+    9- Compute averages by AOI
     
 """
 
@@ -88,7 +86,7 @@ def main():
     # Check quality 
     checkQuality = False
     # Fill missing values and mask by exact AOI 
-    fillMissing = True
+    fillMissing = False
     # Smooth images
     smooth = False
     # Create baselines
@@ -96,10 +94,13 @@ def main():
     # Rank individual images against baseline images
     ranking = False
     # Average MODIS value in each region
-    avgValue = False
+    avgValue = True
+    #Additional options with the average
     # Compute the quality information to inform the 
     # average values for each region
     qualIndex = True
+    #Create charts of the differential to the long term
+    chartDiff = True
     
     # Get the percentage of missing values for each pixel across history
     checkPercMissing = False
@@ -119,7 +120,7 @@ def main():
     tiles = ['h28v07']  # ['h28v07']
     # Start date for the product download (format YYYY-MM-DD)
     #    If None, will default to date of most recent MODIS file on disk if any, or stop the process
-    startDownload = '2018-01-17'  # '2017-05-26'
+    startDownload = '2018-02-01'  # '2017-05-26'
     # End date for the product download (format YYYY-MM-DD)
     #    If None, defaults to today
     endDownload = None
@@ -128,7 +129,7 @@ def main():
     # Starting date for the files to mosaic
     #    If None, will default to the files that have been just downloaded if 
     #    any.
-    startMosaic = '2018-01-17'
+    startMosaic = '2018-02-01'
     # startMosaic = '2005-01-01'
     # Ending date for the files to mosaic
     #    If None, defaults to today
@@ -140,7 +141,7 @@ def main():
     # Output folder of the images to mask
     outCheck = statesMaskedFolder
     # Start date for the files to check
-    startCheck = '2018-01-17'
+    startCheck = '2018-02-01'
     # End date for the files to check
     endCheck = None
     
@@ -150,9 +151,9 @@ def main():
     # Output folder for the images to fill
     outMissing = statesFilledFolder
     # Year(s) of images to fill
-    yearsMissing = [2018]
+    yearsMissing = [2017,2018]
     # Day(s) of images to fill
-    daysMissing = [[33,49],[17,33,49]]
+    daysMissing = [[49,65,81],[49,65,81]]
     # Suffix to put at the end of the name of the 
     # images after filling
     suffMissing = 'f'
@@ -379,7 +380,7 @@ def main():
                             clipRange=(-2000, 10000), parallel=allowPara, nCores=nCores)
             '''
             if avgWeights[s]:
-                avgW = avgWeights[s][0]
+                avgW = avgWeights[s]
             else:
                 avgW = None
             expans = gapfill.gapFillTest(rasters=inputRasters, seasons=days, years=years,
@@ -605,7 +606,17 @@ def main():
                     dict_writer.writeheader()
                     for p in outF:
                         dict_writer.writerow(p)
-    
+        
+        if chartDiff:
+            #Remove the date from the variables in averages
+            for v in averages.itervalues():
+                v.pop('date', None)
+            #Create the plots
+            md.plotModisLtavg(inDic=averages, ltAvgStart=2006, ltAvgEnd=2016, 
+                              dateStartChart='01-01', yearsPlot=range(2010,2019), 
+                              outFolder=dst)
+        
+                    
     if checkPercMissing:
         # Get the names of all the masked rasters on file
         onDisk = [os.path.join(dst, 'CO/masked_missing', f) for 

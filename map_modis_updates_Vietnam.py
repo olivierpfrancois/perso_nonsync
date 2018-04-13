@@ -26,7 +26,7 @@ def run_script(iface):
     satelliteModis = 'terra'  # 'terra' # 'aqua'
     
     # MODIS date to map out
-    modisDates = ['2017-12-03','2018-01-01','2018-02-02']
+    modisDates = ['2018-01-01','2018-02-02','2018-02-18','2018-03-06']
     
     # % of coffee masks to map out (the rasters for each should have been prepared in advance
     modisPct = ['5', '15']

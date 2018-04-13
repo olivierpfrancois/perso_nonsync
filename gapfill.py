@@ -399,6 +399,7 @@ def gapFillTest(rasters, seasons, years, outFolder, suffix,
     
     for r in rasters:
         if not os.path.isfile(r):
+            print('%s is not on disk' %(r))
             return False
     
     #Check that the season subset has been provided in the right format
@@ -432,7 +433,8 @@ def gapFillTest(rasters, seasons, years, outFolder, suffix,
     # Import one band to get the array size
     try:
         dst = gdal.Open(rasters[0])
-    except RuntimeError, e: 
+    except RuntimeError: 
+        print('error opening %s' %(rasters[0]))
         return False
     
     #Transform into array
@@ -446,12 +448,14 @@ def gapFillTest(rasters, seasons, years, outFolder, suffix,
         subsetMissing = np.ones(a.shape, dtype=np.int)
     else:
         if not a.shape == subsetMissing.shape:
+            print('shape of subsetMissing is not the same as the shape of the rasters')
             return False
     
     if not nodata:
         nodata = nodataDst
     
     if not nodata:
+        print('No no data value information in the raster or provided')
         return False
     
     if type(nodata) is int or nodata == np.nan:
@@ -485,6 +489,7 @@ def gapFillTest(rasters, seasons, years, outFolder, suffix,
             totW = [np.nansum(r) for r in wr]
             
         except RuntimeError: 
+            print('Error importing the mask')
             return False
     
     dst = None
@@ -513,6 +518,7 @@ def gapFillTest(rasters, seasons, years, outFolder, suffix,
             try:
                 dst = gdal.Open(rasters[rIndex])
             except RuntimeError: 
+                print('error opening raster %s' %(rasters[rIndex]))
                 return False
             
             # Import that raster to get the positions of the missing values

@@ -18,6 +18,8 @@ from datetime import datetime, timedelta
 from osgeo import gdal, gdalconst, ogr
 import numpy as np
 import functools
+import matplotlib.pyplot as plt
+from matplotlib import cm, dates
 # import warnings
 # warnings.filterwarnings('error')
 
@@ -430,11 +432,12 @@ def clipMaskRasterByShp(shp, raster, outRaster, clipR=True, maskR=True,
         # Get the resulting raster band as an array
         new = new_raster.GetRasterBand(1).ReadAsArray().astype(np.float)
         
-        # Mask the values outside the shapefile
-        clip[new == nodataImg] = nodataImg
+        # Mask the values outside the shapefile, either totally or selectively
         if dataToMask:
             for d in dataToMask:
-                clip[clip == d] = nodataImg
+                clip[(new == nodataImg) & (clip == d)] = nodataImg
+        else:
+            clip[new == nodataImg] = nodataImg
     
     image = None
     
@@ -2703,3 +2706,148 @@ def getGDALTypeFromNumber(nb):
         out = 'GDT_TypeCount'
     
     return(out)
+
+
+def plotModisLtavg(inDic, ltAvgStart, ltAvgEnd, dateStartChart, yearsPlot, outFolder):
+    '''
+    Function to compute the difference of the values in inDic to the 
+    long term average (by date).
+    
+    inDic (dict): Dictionary of dictionaries of the data to plot. 
+            The keys of the main dictionary are the dates and the values are 
+            dictionaries. These secondary dictionaries have the variable to plot as 
+            keys and the value for that date as values.
+            The dates should be string, with the format 'yyyy-mm-dd'
+            All dates should contain the same variables.
+    ltAvgStart (num): start year for computing the long term average (included)
+    ltAvgEnd (num): end year for hte long term average (included)
+    dateStartChart (str): Date of the year at which the chart will start.
+            Format 'mm-dd'
+    yearsPlot (list): list of years to plot. Each year will be a line.
+            If the start date for the chart is not the beginning of the year, 
+            each year will include the beginning dates of the following year.
+    outFolder (str): Full address of the output folder where to export the charts
+    '''
+    
+    ##Take the input dictionary and extract the dates and the values
+    
+    #Get the dates in the input data
+    inDates = inDic.keys()
+    #Transform the dates into date format
+    inDates = [datetime.strptime(d, '%Y-%m-%d').date() for d in inDates]
+    #Sort the dates
+    inDates.sort()
+    
+    #Create empty dictionary to host the lists of values
+    #Export them in the same order as the dates
+    values = {}
+    for d in inDates:
+        for k,v in inDic[d.strftime('%Y-%m-%d')].iteritems():
+            #Add the new variable to the dictionary
+            if not k in values:
+                values[k] = []
+            #Add the value
+            values[k].append(v)
+    
+    #Check that all the dates contain the same variables
+    lSeries = [len(v) for v in values.itervalues()]
+    if not lSeries.count(lSeries[0]) == len(lSeries):
+        print('Dates in input dictionary do not all contain the same variables')
+        return False
+    lSeries = None
+    
+    #Transform each date into a day of the year
+    inDays = [int(d.strftime('%j')) for d in inDates]
+    #Extract the year for each date
+    inYears = [int(d.strftime('%Y')) for d in inDates]
+    
+    #Get the unique days
+    uniqueDays = list(set(inDays))
+    uniqueDays.sort()
+    
+    #Transform the start date for the charts into date format
+    dateStartChart = datetime.strptime(dateStartChart, '%m-%d').date()
+    #Transform into day of the year
+    dateStartChart = int(dateStartChart.strftime('%j'))
+    #Check if there are days in the dates that are less than the start date
+    lessDays = any(d<dateStartChart for d in uniqueDays)
+    
+    #Import the color scheme
+    if len(yearsPlot)<11:
+        colormap = cm.tab10.colors
+    elif len(yearsPlot)<21:
+        colormap = cm.tab20.colors
+    else:
+        print('The code cannot map more than 20 variables in a chart')
+        return False
+    
+    #Loop through each variable
+    for V in values:
+        #For each date compute the long term average
+        ltavgs = {}
+        for D in uniqueDays:
+            #Get all the values for that day across all the years
+            ltavg = [v for v,d,y in zip(values[V],inDays,inYears) 
+                     if (d==D and y>=ltAvgStart and y<=ltAvgEnd)]
+            #Compute the long term average for that day and add to list
+            ltavgs[D] = sum(ltavg)/float(len(ltavg))
+        
+        #Compute the difference to the long term average for that value
+        values[V] = [v-ltavgs[d] for v,d in zip(values[V],inDays)]
+        
+        #Create the lists for the plotting
+        toPlot = {}
+        #Save the labels and dictionary keys in order
+        labelKeys = []
+        #Loop through the years to plot
+        for Y in yearsPlot:
+            if lessDays:
+                k = str(Y)[2:]+'/'+str(Y+1)[2:]
+            else:
+                k = str(Y)[2:]
+            labelKeys.append(k)
+        
+            toPlot[k] = [
+                [v for v,d,y in zip(values[V],inDays,inYears) 
+                         if ((d>=dateStartChart and y==Y) or (d<dateStartChart and y==Y+1))],
+                [d for d,y in zip(inDays,inYears) 
+                         if ((d>=dateStartChart and y==Y) or (d<dateStartChart and y==Y+1))]
+            ]
+            
+            #Transforms the days to strings for the plotting
+            toPlot[k][1] = [datetime(2006+(d<dateStartChart), 1, 1) + timedelta(d - 1) for d in toPlot[k][1]]
+            
+        #Create the plot for that variable
+        fig, ax = plt.subplots()
+        fig.set_size_inches(10,7) #In inches... cm/2.54
+        
+        i = 0
+        for p in labelKeys:
+            ax.plot(toPlot[p][1], toPlot[p][0], color=colormap[i], label=p)
+            i += 1
+        #Add horizontal line at 0
+        plt.axhline(color='k')
+        #Place legend
+        ax.legend(loc='center right', bbox_to_anchor=(1.09, 0.22), 
+                  title='Data Year', facecolor='white', 
+                  framealpha=1) #ncol=3
+        #plt.legend(loc='upper left', title='Data Year')
+        #Format the dates
+        fig.autofmt_xdate()
+        ax.xaxis.set_major_formatter(dates.DateFormatter("%b"))
+        ax.xaxis.set_major_locator(dates.MonthLocator())
+        #Add grid
+        plt.grid()
+        #Change color of background
+        ax.set_facecolor('whitesmoke')
+        #Add labels
+        plt.xlabel('Date', weight='bold')
+        plt.ylabel('Difference to Long Term Average CHI (>0 is better than average)', weight='bold')
+        plt.title('Crop Health Index Annual Profiles (Diff. to Long Term Average): '+V, weight='bold')
+        #Fit layout for smaller image
+        plt.tight_layout()
+
+        #Save to disk
+        plt.savefig(outFolder+'/'+V+'_CHI_annual_profiles_diff_to_long_term.png', dpi=100)
+        
+        
