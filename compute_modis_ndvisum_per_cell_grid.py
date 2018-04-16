@@ -21,11 +21,6 @@
 
 # Some commonly used imports
 
-from PyQt4.QtCore import *
-from PyQt4.QtGui import *
-from qgis.core import *
-from qgis.gui import *
-from osgeo import ogr, gdal
 from tabulate_area_functions import *
 import re, os
 from csv import DictWriter

@@ -24,29 +24,6 @@
 
 import os, re
 from osgeo import gdal, ogr
-
-def run_script(iface):
-    
-    #PARAMETERS
-    
-    #Address of the shapefile to rasterize
-    shp = '/media/olivier/olivier_ext1/gedata_current/jde_coffee/Vietnam/LD_grid_c_m/LD_grid_c_m.shp'
-    
-    #Output resolution wanted for the raster (in meters if utm)
-    resolution = 6
-    
-    #No data value
-    nodata = 0
-    
-    #Attribute to use for the raster values
-    attrib = 'ID'
-    
-    
-    
-    #Do the rasterization
-    toRaster(shp, attrib, resolution)
-    
-    
     
 def toRaster(nm, attrib, resRaster, nodata):
     
@@ -78,3 +55,20 @@ def toRaster(nm, attrib, resRaster, nodata):
     
     target_ds = None
     source_ds = None
+
+
+if __name__ == '__main__':
+    
+    #PARAMETERS
+    
+    #Address of the shapefile to rasterize
+    shp = '/media/olivier/olivier_ext1/gedata_current/jde_coffee/Vietnam/LD_grid_c_m/LD_grid_c_m.shp'
+    
+    #Output resolution wanted for the raster (in meters if utm)
+    resolution = 6
+
+    #Attribute to use for the raster values
+    attrib = 'ID'
+    
+    #Do the rasterization
+    toRaster(shp, attrib, resolution)

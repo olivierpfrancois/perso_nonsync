@@ -22,7 +22,8 @@ import sys
 sys.dont_write_bytecode = True
 
 import os, re, multiprocessing
-import pathos.multiprocessing as mp
+#import pathos.multiprocessing as mp
+import pathos as pa
 import MODIS_gedata_toolbox as md  # GEDATA toolbox for MODIS related tools
 import gapfill  # Python implementation of the interpolation algorithm
 from datetime import datetime, timedelta
@@ -84,7 +85,7 @@ def main():
     # Mosaic images for each region and crop to extent 
     mosaic = False
     # Check quality 
-    checkQuality = False
+    checkQuality = True
     # Fill missing values and mask by exact AOI 
     fillMissing = False
     # Smooth images
@@ -94,7 +95,7 @@ def main():
     # Rank individual images against baseline images
     ranking = False
     # Average MODIS value in each region
-    avgValue = True
+    avgValue = False
     #Additional options with the average
     # Compute the quality information to inform the 
     # average values for each region
@@ -104,7 +105,7 @@ def main():
     
     # Get the percentage of missing values for each pixel across history
     checkPercMissing = False
-    maskLand = False
+    #maskLand = False
     
     ########### DOWNLOAD
     # Product to download
@@ -141,7 +142,7 @@ def main():
     # Output folder of the images to mask
     outCheck = statesMaskedFolder
     # Start date for the files to check
-    startCheck = '2018-02-01'
+    startCheck = '018-03-15' #'2018-02-01'
     # End date for the files to check
     endCheck = None
     
@@ -316,7 +317,8 @@ def main():
             dataset = zip(allNDVI, allQuality, allOut)
             
             if allowPara:
-                p = mp.Pool(nCores)
+                #p = mp.Pool(nCores)
+                p = pa.pools.ProcessPool()
                 
                 p.map(lambda d: md.maskQualityVI(ndviRaster=d[0],
                                                  qualityRaster=d[1],
@@ -353,6 +355,8 @@ def main():
     if fillMissing:
         print('Starting interpolation of missing values')
         
+        fillIndex = {}
+        
         for s, b in zip(range(len(states)), statesBoundFiles):
             print('   Starting region ' + states[s])
             
@@ -372,27 +376,24 @@ def main():
             
             # Get the years for the files on disk
             years = [int(d.strftime('%Y')) for d in datesAll] 
-            '''
-            expans = gapfill.gapFill(rasters=inputRasters, seasons=days, years=years,
-                            outFolder=os.path.join(dst, s, outMissing),
-                            suffix=suffMissing, nodata=[-3000], iMax=27,
-                            subsetSeasons=daysMissing, subsetYears=yearsMissing, subsetMissing=None,
-                            clipRange=(-2000, 10000), parallel=allowPara, nCores=nCores)
-            '''
+            
             if avgWeights[s]:
                 avgW = avgWeights[s]
             else:
                 avgW = None
-            expans = gapfill.gapFillTest(rasters=inputRasters, seasons=days, years=years,
-                            outFolder=os.path.join(dst, states[s], outMissing),
-                            suffix=suffMissing, nodata=[-3000], iMax=27,
-                            subsetSeasons=daysMissing, subsetYears=yearsMissing, subsetMissing=None,
-                            clipRange=(-2000, 10000), maskRaster=avgW, 
-                            parallel=allowPara, nCores=nCores)
+            fillIndex[states[s]] = gapfill.gapFill(rasters=inputRasters, seasons=days, 
+                                                   years=years,
+                                                   outFolder=os.path.join(dst, states[s], outMissing),
+                                                   suffix=suffMissing, nodata=[-3000], 
+                                                   iMax=27, subsetSeasons=daysMissing, 
+                                                   subsetYears=yearsMissing, subsetMissing=None,
+                                                   clipRange=(-2000, 10000), maskRaster=avgW, 
+                                                   parallel=allowPara, nCores=nCores)
             
-            with open("/home/olivier/Desktop/test.csv", "wb") as f:
-                exp = writer(f)
-                exp.writerows(expans)
+            #fillIndex[states[s]] = expans
+            #with open("/home/olivier/Desktop/test.csv", "wb") as f:
+            #    exp = writer(f)
+            #    exp.writerows(expans)
             
             # Mask the resulting rasters to the specific extent of the AOI
             for r, y, d in zip(inputRasters, years, days):

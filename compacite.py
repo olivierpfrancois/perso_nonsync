@@ -2,7 +2,8 @@ import numpy as np
 from osgeo import gdal
 import functools
 import multiprocessing as mp
-import MODIS_gedata_toolbox as md
+import raster_gedata_toolbox as rt
+
 from scipy.stats import _distn_infrastructure
 
 '''
@@ -88,7 +89,7 @@ def compactnessPixel(pixel, rasterDst, nodataIn, radius):
     maxY = pixel[1] + radius + 1
     
     #Extract the array around the pixel
-    arr = md.readRasterBlock(src=rasterDst, colStart=minY,
+    arr = rt.readRasterBlock(src=rasterDst, colStart=minY,
                              rowStart=minX,
                              colBlockSize=maxY - minY,
                              rowBlockSize=maxX - minX,

@@ -10,11 +10,10 @@ from datetime import datetime, timedelta
 from osgeo import gdal
 import MODIS_gedata_toolbox as md
 reload(md)
-import multiprocessing as mp
-import contextlib as context
+#import contextlib as context
 # from xml.dom import NoDataAllowedErr
 # from contextlib import contextmanager
-import numpy as np
+import raster_gedata_toolbox as rt
 
 sys.path.append('/home/olivierp/OlivierGithub/QGIS-scripts')
 import image_proc_functions as img_proc
@@ -207,7 +206,7 @@ if maskLand:
         # Mask using the land data
         imgArray[landArray == noLand] = noImg
         
-        out = md.new_raster_from_base(img, os.path.join(tempDir, os.path.basename(f)),
+        out = rt.newRasterFromBase(img, os.path.join(tempDir, os.path.basename(f)),
                                       'GTiff', -99, gdal.GDT_Float32)
         out.GetRasterBand(1).WriteArray(imgArray)
         
@@ -231,7 +230,7 @@ for f, d in zip(onDisk, daysAll):
     imgArray = img.GetRasterBand(1).ReadAsArray()
     imgArray = imgArray * 1000000
     imgArray.astype('int')
-    out = md.new_raster_from_base(img, os.path.join(tempDir, 'temp.tif'),
+    out = rt.newRasterFromBase(img, os.path.join(tempDir, 'temp.tif'),
                                       'GTiff', img.GetRasterBand(1).GetNoDataValue(),
                                       gdal.GDT_UInt32)
     out.GetRasterBand(1).WriteArray(imgArray)

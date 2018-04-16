@@ -11,10 +11,11 @@ sys.dont_write_bytecode = True
 
 # Imports
 from datetime import datetime, timedelta
-from osgeo import gdal, gdalconst, ogr
+from osgeo import gdal, ogr
 import os, re, osr
 import numpy as np
 from csv import DictWriter
+import raster_gedata_toolbox as rt
 
 sys.path.append('/home/olivier/OlivierGithub/QGIS-scripts') #('C:/Users/Olivier/OlivierGithub')
 import projection_function as proj
@@ -217,7 +218,7 @@ def extractModis(root, regions, varieties, regionsIn,
         #Import the mask
         weightsRaster = gdal.Open(root+'/'+regions[r]+'/'+masks[r][0])
         #Create an empty copy for storing the temporary weighted image
-        weighted = new_raster_from_base(weightsRaster, tempDir+'/temp.tif', 'GTiff', 0., gdal.GDT_Float32, bands=1)
+        weighted = rt.newRasterFromBase(weightsRaster, tempDir+'/temp.tif', 'GTiff', 0., gdal.GDT_Float32, bands=1)
         #Import coffee weights band as array
         weightsBand = weightsRaster.GetRasterBand(1)
         weightsArray = weightsBand.ReadAsArray()
@@ -264,7 +265,7 @@ def extractModis(root, regions, varieties, regionsIn,
             #Import the mask
             weightsRaster = gdal.Open(root+'/'+regions[r]+'/'+masks[r][v])
             #Create an empty copy for storing the temporary weighted image
-            weighted = new_raster_from_base(weightsRaster, tempDir+'/temp.tif', 'GTiff', 0., gdal.GDT_Float32, bands=1)
+            weighted = rt.newRasterFromBase(weightsRaster, tempDir+'/temp.tif', 'GTiff', 0., gdal.GDT_Float32, bands=1)
             #Import coffee weights band as array
             weightsBand = weightsRaster.GetRasterBand(1)
             weightsArray = weightsBand.ReadAsArray()
@@ -291,7 +292,7 @@ def extractModis(root, regions, varieties, regionsIn,
                     os.remove(os.path.join(tempDir,'tempES.tif'))
                 except OSError:
                     pass
-                weighted = new_raster_from_base(weightsRaster, tempDir+'/tempES.tif', 'GTiff', 0., gdal.GDT_Float32, bands=1)
+                weighted = rt.newRasterFromBase(weightsRaster, tempDir+'/tempES.tif', 'GTiff', 0., gdal.GDT_Float32, bands=1)
                 #Export to temporary raster
                 weighted.GetRasterBand(1).WriteArray(weightsArray)
                 #Close the temporary raster
@@ -327,7 +328,7 @@ def extractModis(root, regions, varieties, regionsIn,
             #Import the mask
             weightsRaster = gdal.Open(root+'/'+regions[r]+'/'+masks[r][v])
             #Create an empty copy for storing the temporary weighted image
-            weighted = new_raster_from_base(weightsRaster, tempDir+'/temp.tif', 'GTiff', 0, gdal.GDT_Float32, bands=1)
+            weighted = rt.newRasterFromBase(weightsRaster, tempDir+'/temp.tif', 'GTiff', 0, gdal.GDT_Float32, bands=1)
             #Import coffee weights band as array
             weightsBand = weightsRaster.GetRasterBand(1)
             weightsArray = weightsBand.ReadAsArray()
@@ -377,7 +378,7 @@ def extractModis(root, regions, varieties, regionsIn,
                     pass
                 
                 #Create an empty copy for storing the temporary weighted image
-                weighted = new_raster_from_base(baseImg, tempDir+'/temp.tif', 'GTiff', np.nan, gdal.GDT_Float32, bands=1)
+                weighted = rt.newRasterFromBase(baseImg, tempDir+'/temp.tif', 'GTiff', np.nan, gdal.GDT_Float32, bands=1)
                 
                 #Import image band as array
                 imgBand = baseImg.GetRasterBand(1)
@@ -398,7 +399,7 @@ def extractModis(root, regions, varieties, regionsIn,
                 geoBase = baseImg.GetGeoTransform()
                 reproject = [1 for a,b in zip(geoSmooth,geoBase) if not a==b]
                 if reproject:
-                    weightsReproj = warp_raster(weightsRaster, baseImg, resampleOption='nearest', outputURI=None, outFormat='MEM')
+                    weightsReproj = rt.warpRaster(weightsRaster, baseImg, resampleOption='nearest', outputURI=None, outFormat='MEM')
                 
                 else:
                     weightsReproj = weightsRaster
@@ -540,103 +541,7 @@ def extractModis(root, regions, varieties, regionsIn,
     try:
         driver.DeleteDataSource(os.path.join(tempDir,'temp.shp'))
     except OSError:
-        pass    
-        
-                
-def warp_raster(src, dst, resampleOption='nearest', outputURI=None, outFormat='MEM'):
-    """
-    ---------------------------------------------------------------------------------------------
-    Function : Warp a source raster to the resolution, extent and projection of a destination raster.
-           
-            The function returns the resulting raster. If outFormat is different from 'MEM', the 
-            raster is also saved to disk using the information provided in outputURI.
-            
-            Inputs
-            --src (gdal Dataset): source raster to be warped
-            --dst (gdal Dataset): destination raster that will provide the resolution, extent and projection
-            --resampleOption (string): One of 'nearest', 'bilinear', 'cubic', 'cubic spline', 'lanczos', 
-                    'average', or 'mode'. Method to use to resample the pixels of the source raster
-            --outputURI (string, optional): Full address and name of the output raster. If outFormat is 'MEM',
-                    this argument is ignored and the function simply produces a raster in memory. 
-                    The extension for the output file should match the outFormat.
-            
-            --outFormat (string, optional): Format to use for the output raster from the function. 
-                    Use 'GTiff' for a .tif output. Default creates a raster in memory.
-    ---------------------------------------------------------------------------------------------
-    """  
-    if not type(src) is gdal.Dataset:
-        return False
-    
-    if not type(dst) is gdal.Dataset:
-        return False
-    
-    #Define resampling options
-    resampleOptions = {'nearest': gdalconst.GRA_NearestNeighbour, 'bilinear':gdalconst.GRA_Bilinear, 
-                   'cubic':gdalconst.GRA_Cubic, 'cubic spline':gdalconst.GRA_CubicSpline, 
-                   'lanczos':gdalconst.GRA_Lanczos, 'average':gdalconst.GRA_Average, 
-                   'mode':gdalconst.GRA_Mode} 
-    
-    if not resampleOption in resampleOptions.keys():
-        return False
-    
-    #Raster to host the warped output
-    if outFormat == 'MEM':
-        rOut = new_raster_from_base(dst, 'temp', 'MEM', 0, src.GetRasterBand(1).DataType, bands=src.RasterCount)
-    else:
-        rOut = new_raster_from_base(dst, outputURI, outFormat, 0, src.GetRasterBand(1).DataType, bands=src.RasterCount)
-    
-    #Warp: the parameters are source raster, destination raster, source projection, destination projection, resampling option 
-    gdal.ReprojectImage(src, rOut, src.GetProjection(), rOut.GetProjection(), resampleOptions[resampleOption])
-    
-    return rOut
-
-def new_raster_from_base(base, outputURI, formatR, nodata, datatype, bands=None):
-    ''' 
-    Create an empty copy of a raster from an existing one
-    
-    base: gdal raster layer
-        Name of the variable with the input raster to copy
-    
-    outputURI: string
-        Address + name of the output raster (extension should agree with format, none for memory)
-        
-    formatR: string
-        Format for the dataset (e.g. "GTiff", "MEM")
-    
-    nodata: int/float
-        No data value (type should agree with raster type)
-    
-    datatype: gdal data type (e.g. gdal.GDT_Int32)
-        Data type for the raster
-    
-    bands: [optional] int
-        Number of bands for the output raster. 
-        If not specified, will use the number of bands of the input raster
-    
-    The function returns a gdal raster variable filled with the nodata value
-    '''
-    
-    cols = base.RasterXSize
-    rows = base.RasterYSize
-    projection = base.GetProjection()
-    geotransform = base.GetGeoTransform()
-    if not bands:
-        bands = base.RasterCount
-
-    driver = gdal.GetDriverByName(formatR)
-    
-    if formatR == "GTiff":
-        new_raster = driver.Create(str(outputURI), cols, rows, bands, datatype, options=['COMPRESS=LZW', 'BIGTIFF=IF_NEEDED'])
-    else:
-        new_raster = driver.Create(str(outputURI), cols, rows, bands, datatype)
-    new_raster.SetProjection(projection)
-    new_raster.SetGeoTransform(geotransform)
-
-    for i in range(bands):
-        new_raster.GetRasterBand(i + 1).SetNoDataValue(nodata)
-        new_raster.GetRasterBand(i + 1).Fill(nodata)
-
-    return new_raster
+        pass
 
 if __name__ == '__main__':
     main()

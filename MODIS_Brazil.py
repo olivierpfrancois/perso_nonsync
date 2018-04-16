@@ -389,10 +389,11 @@ def main():
     if fillMissing:
         print('Starting interpolation of missing values')
         
+        fillIndex = {}
+        
         for s, b in zip(range(len(states)), statesBoundFiles):
             print('   Starting region ' + states[s])
-            if not s>4:
-                continue
+            
             inputRasters = [os.path.join(dst, states[s], inMissing, f) for 
                             f in os.listdir(os.path.join(dst, states[s], inMissing)) 
                             if f.endswith('.tif')]
@@ -409,28 +410,24 @@ def main():
             
             # Get the years for the files on disk
             years = [int(d.strftime('%Y')) for d in datesAll] 
-            '''
-            expans = gapfill.gapFill(rasters=inputRasters, seasons=days, years=years,
-                                     outFolder=os.path.join(dst, states[s], outMissing),
-                                     suffix=suffMissing, nodata=[-3000], iMax=20,
-                                     subsetSeasons=daysMissing, subsetYears=yearsMissing, 
-                                     subsetMissing=None, clipRange=(-2000, 10000), 
-                                     parallel=allowPara, nCores=nCores)
-            '''
+            
             if avgWeights[s]:
                 avgW = avgWeights[s]
             else:
                 avgW = None
-            expans = gapfill.gapFillTest(rasters=inputRasters, seasons=days, years=years,
-                            outFolder=os.path.join(dst, states[s], outMissing),
-                            suffix=suffMissing, nodata=[-3000], iMax=27,
-                            subsetSeasons=daysMissing, subsetYears=yearsMissing, subsetMissing=None,
-                            clipRange=(-2000, 10000), maskRaster=avgW, 
-                            parallel=allowPara, nCores=nCores)
+            fillIndex[states[s]] = gapfill.gapFill(rasters=inputRasters, seasons=days, 
+                                                   years=years, 
+                                                   outFolder=os.path.join(dst, states[s], outMissing),
+                                                   suffix=suffMissing, nodata=[-3000], 
+                                                   iMax=27, subsetSeasons=daysMissing, 
+                                                   subsetYears=yearsMissing, subsetMissing=None,
+                                                   clipRange=(-2000, 10000), maskRaster=avgW, 
+                                                   parallel=allowPara, nCores=nCores)
             
-            with open(dst+"/test"+states[s]+".csv", "wb") as f:
-                exp = writer(f)
-                exp.writerows(expans)
+            #fillIndex[states[s]] = expans
+            #with open(dst+"/test"+states[s]+".csv", "wb") as f:
+            #    exp = writer(f)
+            #    exp.writerows(expans)
                 
             # Mask the resulting rasters to the specific extent of the AOI
             for r, y, d in zip(inputRasters, years, days):

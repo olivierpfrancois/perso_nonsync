@@ -1,12 +1,12 @@
 from osgeo import ogr, gdal, osr, gdalconst
 from csv import DictWriter
-import os, processing, re, csv, platform, sys
+import os, processing, re, csv, platform, sys, subprocess
 import numpy as np
-
+import raster_gedata_toolbox as rt
 sys.path.append('C:/Users/Olivier/OlivierGithub/QGIS-scripts')
 import image_proc_functions as img
 
-def run_script(iface):
+def main():
     ##########################################################################################################################
     ##########################################################################################################################
     ##PARAMETERS
@@ -65,7 +65,7 @@ def run_script(iface):
     
     
     #Share of clouds/missing per cell under which correct by simple proportional scaling
-    propCloud <- 0.5
+    propCloud = 0.5
     
     
     #Output name and address for the combined files and legend
@@ -113,7 +113,7 @@ def run_script(iface):
     baseClassif = gdal.Open(os.path.join(classifFolder,exportClassifName))
     #Mask the combined raster with the srtm data if needed and demultiply the classification based on the elevation breaks
     if not srtmMask:
-        processed = new_raster_from_base(baseClassif, tempFolder+'/'+'masked0.tif', 'GTiff', -32768, gdal.GDT_Int16, bands=1)
+        processed = rt.newRasterFromBase(baseClassif, tempFolder+'/'+'masked0.tif', 'GTiff', -32768, gdal.GDT_Int16, bands=1)
         processed.GetRasterBand(1).WriteArray(baseClassif.GetRasterBand(1).readAsArray())
         
         #Number of pieces of the classification raster to tabulate
@@ -128,7 +128,7 @@ def run_script(iface):
         nodata = elev.GetRasterBand(1).GetNoDataValue()
         
         #Adapt the resolution of the smooth images to the baseline if needed
-        elev = warp_raster(elev, baseClassif, resampleOption='average', outputURI=None, outFormat='MEM')
+        elev = rt.warpRaster(elev, baseClassif, resampleOption='average', outputURI=None, outFormat='MEM')
         
         #Number of pieces of the classification raster to tabulate
         pieces = len(breakValues) + 1
@@ -152,15 +152,15 @@ def run_script(iface):
         processed = []
         for i in range(pieces):
             #Prepare empty rasters to hold the masked rasters
-            processed.append(new_raster_from_base(baseClassif, tempFolder+'/'+'masked'+str(i)+'.tif', 'GTiff', -32768, gdal.GDT_Int16, bands=1))
+            processed.append(rt.newRasterFromBase(baseClassif, tempFolder+'/'+'masked'+str(i)+'.tif', 'GTiff', -32768, gdal.GDT_Int16, bands=1))
         
         for xStep in range(xBlocks):
             for yStep in range(yBlocks):
                 
                 #Import the block of the classification
-                baseBlock = readRasterBlock(baseClassif, xStep*BlockXSize, yStep*BlockYSize, BlockXSize, BlockYSize)
+                baseBlock = rt.readRasterBlock(baseClassif, xStep*BlockXSize, yStep*BlockYSize, BlockXSize, BlockYSize)
                 #Import the block of the elevation raster
-                elevBlock = readRasterBlock(elev, xStep*BlockXSize, yStep*BlockYSize, BlockXSize, BlockYSize)
+                elevBlock = rt.readRasterBlock(elev, xStep*BlockXSize, yStep*BlockYSize, BlockXSize, BlockYSize)
                 
                 for i in range(pieces):
                     #Mask the values based on the elevation raster
@@ -225,9 +225,7 @@ def run_script(iface):
     #Import the confusion matrices
     
     
-##########################################################################################################################
-##########################################################################################################################
-##FUNCTION    
+       
 def combine_classifications(classifFolder, orderClassif, legendFolder, legendPrefix, legendExt, 
                             legendDelim, tempFolder, exportClassifName, toNa=[], valuesNotInLegend=[]):
     
@@ -337,7 +335,7 @@ def combine_classifications(classifFolder, orderClassif, legendFolder, legendPre
         band = mapkey[index]
         
         #Create an empty raster to export the classification that was just mapped
-        outR = new_raster_from_base(classifRaster, tempFolder+'/reclass_'+nm+'.tif', 'GTiff', 255, gdal.GDT_UInt32, bands=1)
+        outR = rt.newRasterFromBase(classifRaster, tempFolder+'/reclass_'+nm+'.tif', 'GTiff', 255, gdal.GDT_UInt32, bands=1)
         
         #Write the re-classified values to the empty raster
         outR.GetRasterBand(1).WriteArray(band)
@@ -375,60 +373,8 @@ def combine_classifications(classifFolder, orderClassif, legendFolder, legendPre
     
     #Clean the temp folder
     for nm in classifNames:
-        os.remove(tempFolder+'/reclass_'+nm+'.tif')
-    
-    
-def new_raster_from_base(base, outputURI, format, nodata, datatype, bands=None):
-    """
-    ---------------------------------------------------------------------------------------------
-    Function : Create an empty copy of a raster from an existing one
-               
-    Arguments : 
+        os.remove(tempFolder+'/reclass_'+nm+'.tif')    
 
-    - base: gdal raster layer
-        Name of the variable with the input raster to copy
-    
-    - outputURI: string
-        Address + name of the output raster (extension should agree with format, none for memory)
-        
-    - format: string
-        Format for the dataset (e.g. "GTiff", "MEM") 
-    
-    - nodata: int/float
-        No data value (type should agree with raster type)
-    
-    - datatype: gdal data type (e.g. gdal.GDT_Int32)
-        Data type for the raster
-    
-    - bands: [optional] int
-        Number of bands for the output raster. 
-        If not specified, will use the number of bands of the input raster
-    
-    Return value : A gdal raster variable filled with the nodata value
-    ---------------------------------------------------------------------------------------------
-    """    
-    
-    cols = base.RasterXSize
-    rows = base.RasterYSize
-    projection = base.GetProjection()
-    geotransform = base.GetGeoTransform()
-    if not bands:
-        bands = base.RasterCount
-
-    driver = gdal.GetDriverByName(format)
-    
-    if format == "GTiff":
-        new_raster = driver.Create(str(outputURI), cols, rows, bands, datatype, options=['COMPRESS=LZW'])
-    else:
-        new_raster = driver.Create(str(outputURI), cols, rows, bands, datatype)
-    new_raster.SetProjection(projection)
-    new_raster.SetGeoTransform(geotransform)
-
-    for i in range(bands):
-        new_raster.GetRasterBand(i + 1).SetNoDataValue(nodata)
-        new_raster.GetRasterBand(i + 1).Fill(nodata)
-
-    return new_raster
 
 def do_message(msgType, msgStr):
     """
@@ -453,84 +399,3 @@ def checkPlatform():
     
     return(currentPlatform)
 
-def readRasterBlock(src, xStart, yStart, xBlockSize, yBlockSize, band=1):
-    '''
-    Function to read a block of data from a gdal Dataset. It will return the block as a numpy array
-    
-    src (gdal Dataset): raster to extract the block from
-    xStart (int): X pixel value from which to start extraction (upper left corner)
-    yStart (int): Y pixel value from which to start extraction (upper left corner)
-    xBlockSize (int): X size of the block to extract. If the block is larger than the number 
-            of pixels from xStart, will extract up to the raster limit
-    yBlockSize (int): Y size of the block to extract. If the block is larger than the number 
-            of pixels from xStart, will extract up to the raster limit
-    band (int): band from which to extract the block. 1 by default.
-    '''
-    
-    #Get the wanted band
-    band = src.GetRasterBand(band)
-    
-    #Get the size of the raster
-    xsize = band.XSize
-    ysize = band.YSize
-    
-    if yStart + yBlockSize < ysize:
-        rows = yBlockSize
-    else:
-        rows = ysize - yStart
-    
-    if xStart + xBlockSize < xsize:
-        cols = xBlockSize
-    else:
-        cols = xsize - xStart
-            
-    outArray = band.ReadAsArray(xStart, yStart, cols, rows)
-    
-    return outArray
-
-def warp_raster(src, dst, resampleOption='nearest', outputURI=None, outFormat='MEM'):
-    """
-    ---------------------------------------------------------------------------------------------
-    Function : Warp a source raster to the resolution, extent and projection of a destination raster.
-           
-            The function returns the resulting raster. If outFormat is different from 'MEM', the 
-            raster is also saved to disk using the information provided in outputURI.
-            
-            Inputs
-            --src (gdal Dataset): source raster to be warped
-            --dst (gdal Dataset): destination raster that will provide the resolution, extent and projection
-            --resampleOption (string): One of 'nearest', 'bilinear', 'cubic', 'cubic spline', 'lanczos', 
-                    'average', or 'mode'. Method to use to resample the pixels of the source raster
-            --outputURI (string, optional): Full address and name of the output raster. If outFormat is 'MEM',
-                    this argument is ignored and the function simply produces a raster in memory. 
-                    The extension for the output file should match the outFormat.
-            
-            --outFormat (string, optional): Format to use for the output raster from the function. 
-                    Use 'GTiff' for a .tif output. Default creates a raster in memory.
-    ---------------------------------------------------------------------------------------------
-    """  
-    if not type(src) is gdal.Dataset:
-        return False
-    
-    if not type(dst) is gdal.Dataset:
-        return False
-    
-    #Define resampling options
-    resampleOptions = {'nearest': gdalconst.GRA_NearestNeighbour, 'bilinear':gdalconst.GRA_Bilinear, 
-                   'cubic':gdalconst.GRA_Cubic, 'cubic spline':gdalconst.GRA_CubicSpline, 
-                   'lanczos':gdalconst.GRA_Lanczos, 'average':gdalconst.GRA_Average, 
-                   'mode':gdalconst.GRA_Mode} 
-    
-    if not resampleOption in resampleOptions.keys():
-        return False
-    
-    #Raster to host the warped output
-    if outFormat == 'MEM':
-        rOut = new_raster_from_base(dst, 'temp', 'MEM', 0, src.GetRasterBand(1).DataType, bands=src.RasterCount)
-    else:
-        rOut = new_raster_from_base(dst, outputURI, outFormat, 0, src.GetRasterBand(1).DataType, bands=src.RasterCount)
-    
-    #Warp: the parameters are source raster, destination raster, source projection, destination projection, resampling option 
-    gdal.ReprojectImage(src, rOut, src.GetProjection(), rOut.GetProjection(), resampleOptions[resampleOption])
-    
-    return rOut

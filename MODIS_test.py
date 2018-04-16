@@ -46,7 +46,7 @@ def main():
     satelliteModis = 'terra'  # 'terra' # 'aqua'
     
     # Root folder
-    prefixRootSys = '/home/olivierp/jde_coffee'  # '/media/olivier/olivier_ext1/gedata_current/jde_coffee'  #'E:/gedata_current'
+    prefixRootSys = '/media/olivier/olivier_ext1/gedata_current/jde_coffee'  #'E:/gedata_current' #'/home/olivierp/jde_coffee'
     
     # #DIRECTORIES parameters
     # Working directory
@@ -103,14 +103,14 @@ def main():
         
         # Get the years for the files on disk
         years = [int(d.strftime('%Y')) for d in datesAll] 
-        t0 = time.time()
+        #t0 = time.time()
         expans = gapfill_test.gapFill(rasters=inputRasters, seasons=days, years=years,
                                  outFolder=os.path.join(dst, s, outMissing),
                                  suffix=suffMissing, nodata=[-3000], iMax=20,
                                  subsetSeasons=daysMissing, subsetYears=yearsMissing,
                                  subsetMissing=None, clipRange=(-2000, 10000),
                                  parallel=allowPara, nCores=nCores)
-        print ('overall time %s' % (time.time() - t0))
+        #print ('overall time %s' % (time.time() - t0))
         # print expans
 
 

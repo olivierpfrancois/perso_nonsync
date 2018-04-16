@@ -20,6 +20,7 @@ import numpy as np
 import functools
 import matplotlib.pyplot as plt
 from matplotlib import cm, dates
+import raster_gedata_toolbox as rt
 # import warnings
 # warnings.filterwarnings('error')
 
@@ -333,7 +334,8 @@ def clipMaskRasterByShp(shp, raster, outRaster, clipR=True, maskR=True,
     outRaster (str): Full address of the output raster
     clipR (bool): Whether the image should be clipped by the shapefile
     maskR (bool): Whether the image should be masked by the shapefile
-    dataToMask (list): Optional list of values of the data to mask. 
+    dataToMask (list): Optional list of values of the data to mask
+        outside of the polygon. 
         If None, all the values will be masked
     nodataOut (num): Optional no data value for the output raster. If None, 
         will use the no data value from the input raster.
@@ -361,8 +363,8 @@ def clipMaskRasterByShp(shp, raster, outRaster, clipR=True, maskR=True,
     mosaicRows = image.RasterYSize
     
     # Get the pixel position of the shapefile corners
-    ulX, ulY = world2Pixel(geoTrans, minX, maxY)
-    lrX, lrY = world2Pixel(geoTrans, maxX, minY)
+    ulX, ulY = rt.world2Pixel(geoTrans, minX, maxY)
+    lrX, lrY = rt.world2Pixel(geoTrans, maxX, minY)
     
     # Create a new geoTransform for the output raster
     geoRegion = list(geoTrans)
@@ -412,7 +414,7 @@ def clipMaskRasterByShp(shp, raster, outRaster, clipR=True, maskR=True,
     # Create an empty raster with the right size
     rows, cols = clip.shape
     driver = gdal.GetDriverByName("GTiff")
-    new_raster = driver.Create(outRaster, cols, rows, 1, getattr(gdal, getGDALTypeFromNumber(dType)),
+    new_raster = driver.Create(outRaster, cols, rows, 1, getattr(gdal, rt.getGDALTypeFromNumber(dType)),
                                options=['COMPRESS=LZW', 'BIGTIFF=IF_NEEDED'])
     new_raster.SetProjection(projection)
     new_raster.SetGeoTransform(geoRegion)
@@ -631,7 +633,7 @@ def smoothSeries(inRasters, toSave, outFolder, regWindow, avgWindow,
             os.remove(outFolder + '/smooth_' + os.path.basename(f))
     
     # Create empty copies of these files to use for the smoothed data only for the files to save
-    processed = [new_raster_from_base(p, outFolder + '/smooth_' + os.path.basename(f),
+    processed = [rt.newRasterFromBase(p, outFolder + '/smooth_' + os.path.basename(f),
                                       'GTiff', nodata, gdal.GDT_Float32) 
                     if s else False for s, p, f in zip(toSave, toProcess, inRasters)]
     
@@ -653,7 +655,7 @@ def smoothSeries(inRasters, toSave, outFolder, regWindow, avgWindow,
                   str(totBlocks))
             progress += 1
             
-            blocks = [readRasterBlock(p, xStep * blockXSize, yStep * blockYSize,
+            blocks = [rt.readRasterBlock(p, xStep * blockXSize, yStep * blockYSize,
                                       blockXSize, blockYSize) 
                                       for p in toProcess]
             
@@ -1209,7 +1211,7 @@ def createDecileRaster(images, outFile, mask=None, outModelRaster=None, blockXSi
     nodata = sourceImg[0].GetRasterBand(1).GetNoDataValue()
     
     # Create an empty copy in memory
-    toProcess = [new_raster_from_base(p, '', 'MEM',
+    toProcess = [rt.newRasterFromBase(p, '', 'MEM',
                                      nodata, gdal.GDT_Float32, bands=1) for
                  p, f in zip(sourceImg, images)]
     
@@ -1224,7 +1226,7 @@ def createDecileRaster(images, outFile, mask=None, outModelRaster=None, blockXSi
         # Import the mask raster as an array
         n = gdal.Open(mask)
         nArray = n.GetRasterBand(1).ReadAsArray()
-        nodataMask = n.GetRasterBand(1).GetNoDataValue()
+        #nodataMask = n.GetRasterBand(1).GetNoDataValue()
         
         # Create the mask
         nArray = np.logical_or(
@@ -1273,7 +1275,7 @@ def createDecileRaster(images, outFile, mask=None, outModelRaster=None, blockXSi
         
         # Change the resolution of the rasters
         outModel = gdal.Open(outModelRaster)
-        toProcess = [warp_raster(p, outModel, resampleOption='average', outputURI=None, outFormat='MEM') 
+        toProcess = [rt.warpRaster(p, outModel, resampleOption='average', outputURI=None, outFormat='MEM') 
                      for p in toProcess]
         
     # Remove existing raster if any
@@ -1281,7 +1283,7 @@ def createDecileRaster(images, outFile, mask=None, outModelRaster=None, blockXSi
         os.remove(outFile)
     
     # Create an empty copy with 10 layers to use for storing the deciles
-    processed = new_raster_from_base(toProcess[0], outFile, 'GTiff',
+    processed = rt.newRasterFromBase(toProcess[0], outFile, 'GTiff',
                                      nodata, gdal.GDT_Float32, bands=10)
     
     # Get the size of the rasters to identify the limits of the blocks to loop through
@@ -1296,7 +1298,7 @@ def createDecileRaster(images, outFile, mask=None, outModelRaster=None, blockXSi
     for xStep in range(xBlocks):
         for yStep in range(yBlocks):
             
-            block = [readRasterBlock(p, xStep * blockXSize, yStep * blockYSize, blockXSize, blockYSize) for p in toProcess]
+            block = [rt.readRasterBlock(p, xStep * blockXSize, yStep * blockYSize, blockXSize, blockYSize) for p in toProcess]
             
             # Bring the blocks together into one single array
             block = np.dstack(block)
@@ -1511,7 +1513,7 @@ def estimateRankRaster(image, deciles, outFile, densityMask=None,
     geoBase = baseImg.GetGeoTransform()
     reproject = [1 for a, b in zip(geoSmooth, geoBase) if not a == b]
     if reproject:
-        smoothImg = warp_raster(smoothImg, baseImg, resampleOption='average', outputURI=None, outFormat='MEM')
+        smoothImg = rt.warpRaster(smoothImg, baseImg, resampleOption='average', outputURI=None, outFormat='MEM')
     
     # Get the size of the rasters to identify the limits of the blocks to loop through
     band = baseImg.GetRasterBand(1)
@@ -1542,25 +1544,25 @@ def estimateRankRaster(image, deciles, outFile, densityMask=None,
             os.remove(outRaster)
         
         # Create an empty copy for storing the deciles comparisons
-        processed = new_raster_from_base(baseImg, outRaster, 'GTiff',
+        processed = rt.newRasterFromBase(baseImg, outRaster, 'GTiff',
                                          nodata, gdal.GDT_Int16, bands=1)
         
         for xStep in range(xBlocks):
             for yStep in range(yBlocks):
                 
                 # Read the block from the images
-                blockSmooth = readRasterBlock(smoothImg, xStep * blockXSize,
+                blockSmooth = rt.readRasterBlock(smoothImg, xStep * blockXSize,
                                               yStep * blockYSize,
                                               blockXSize, blockYSize)
                 
-                blockBase = [readRasterBlock(baseImg, xStep * blockXSize,
+                blockBase = [rt.readRasterBlock(baseImg, xStep * blockXSize,
                                              yStep * blockYSize,
                                              blockXSize, blockYSize, band=b + 1) 
                              for b in range(baseImg.RasterCount)]
                 
                 if densityMask:
                     # Read the block from the mask 
-                    blockMask = readRasterBlock(nanMask, xStep * blockXSize,
+                    blockMask = rt.readRasterBlock(nanMask, xStep * blockXSize,
                                                 yStep * blockYSize,
                                                 blockXSize, blockYSize)
                 
@@ -1716,7 +1718,7 @@ def avgRegionRasterWrap(regionIn, avgWeights, weightField=None,
                                 datesImg=datesAll,
                                 weightsRaster=avgWeights,
                                 weightField=weightField,
-                                alltouch=False,
+                                alltouch=alltouch,
                                 blockXSize=256, blockYSize=256)
     
     if not avgRegion:
@@ -1773,7 +1775,7 @@ def avgRegionRaster(images, datesImg, weightsRaster=None, weightField=None,
             inVecLayer = dataSource.GetLayer(0)
             
             # Prepare an empty raster to rasterize the shapefile
-            weightsRaster = new_raster_from_base(baseImg, 'temp', 'MEM', -1, gdal.GDT_Float32) 
+            weightsRaster = rt.newRasterFromBase(baseImg, 'temp', 'MEM', -1, gdal.GDT_Float32) 
             
             # Transform alltouch
             if alltouch:
@@ -1796,7 +1798,7 @@ def avgRegionRaster(images, datesImg, weightsRaster=None, weightField=None,
             geoBase = baseImg.GetGeoTransform()
             reproject = [1 for a, b in zip(geoSmooth, geoBase) if not a == b]
             if reproject:
-                weightsRaster = warp_raster(weightsRaster, baseImg, resampleOption='nearest', outputURI=None, outFormat='MEM')
+                weightsRaster = rt.warpRaster(weightsRaster, baseImg, resampleOption='nearest', outputURI=None, outFormat='MEM')
         
         baseImg = None
         nodataWeights = weightsRaster.GetRasterBand(1).GetNoDataValue()
@@ -1831,7 +1833,7 @@ def avgRegionRaster(images, datesImg, weightsRaster=None, weightField=None,
             for yStep in range(yBlocks):
                 
                 # Read the block from the image
-                blockBase = readRasterBlock(baseImg,
+                blockBase = rt.readRasterBlock(baseImg,
                                             xStep * blockXSize, yStep * blockYSize,
                                             blockXSize, blockYSize)
                 
@@ -1845,7 +1847,7 @@ def avgRegionRaster(images, datesImg, weightsRaster=None, weightField=None,
                 
                 if weightsRaster:
                     # Read the block from the weights
-                    blockWeight = readRasterBlock(weightsRaster,
+                    blockWeight = rt.readRasterBlock(weightsRaster,
                                                   xStep * blockXSize, yStep * blockYSize,
                                                   blockXSize, blockYSize)
                     
@@ -1918,7 +1920,7 @@ def computeQualityIndexNdviWrap(regionIn, avgWeights, weightField=None,
                                         missingValue=missingValue,
                                         weightsRaster=avgWeights,
                                         weightField=weightField,
-                                        alltouch=False,
+                                        alltouch=alltouch,
                                         blockXSize=256, blockYSize=256)
     
     if not avgRegion:
@@ -1950,7 +1952,7 @@ def computeQualityIndexNdvi(images, datesImg, missingValue=None,
             inVecLayer = dataSource.GetLayer(0)
             
             # Prepare an empty raster to rasterize the shapefile
-            weightsRaster = new_raster_from_base(baseImg, 'temp', 'MEM', -1, gdal.GDT_Float32) 
+            weightsRaster = rt.newRasterFromBase(baseImg, 'temp', 'MEM', -1, gdal.GDT_Float32) 
             
             # Transform alltouch
             if alltouch:
@@ -1973,7 +1975,7 @@ def computeQualityIndexNdvi(images, datesImg, missingValue=None,
             geoBase = baseImg.GetGeoTransform()
             reproject = [1 for a, b in zip(geoSmooth, geoBase) if not a == b]
             if reproject:
-                weightsRaster = warp_raster(weightsRaster, baseImg,
+                weightsRaster = rt.warpRaster(weightsRaster, baseImg,
                                             resampleOption='nearest',
                                             outputURI=None, outFormat='MEM')
         
@@ -2015,7 +2017,7 @@ def computeQualityIndexNdvi(images, datesImg, missingValue=None,
             for yStep in range(yBlocks):
                 
                 # Read the block from the image
-                blockBase = readRasterBlock(baseImg,
+                blockBase = rt.readRasterBlock(baseImg,
                                             xStep * blockXSize, yStep * blockYSize,
                                             blockXSize, blockYSize)
                 
@@ -2033,7 +2035,7 @@ def computeQualityIndexNdvi(images, datesImg, missingValue=None,
                     
                 if weightsRaster:
                     # Read the block from the weights
-                    blockWeight = readRasterBlock(weightsRaster,
+                    blockWeight = rt.readRasterBlock(weightsRaster,
                                                   xStep * blockXSize, yStep * blockYSize,
                                                   blockXSize, blockYSize)
                     
@@ -2144,7 +2146,7 @@ def avgRegionQualWrap(regionIn, maskedIn, avgWeights, weightField=None,
                                 maskedQual=qualDisk,
                                 weightsRaster=avgWeights,
                                 weightField=weightField,
-                                alltouch=False,
+                                alltouch=alltouch,
                                 blockXSize=256, blockYSize=256)
     
     if not avgRegion:
@@ -2201,7 +2203,7 @@ def avgRegionQual(images, datesImg, maskedQual, weightsRaster=None, weightField=
             inVecLayer = dataSource.GetLayer(0)
             
             # Prepare an empty raster to rasterize the shapefile
-            weightsRaster = new_raster_from_base(baseImg, 'temp', 'MEM', -1,
+            weightsRaster = rt.newRasterFromBase(baseImg, 'temp', 'MEM', -1,
                                                  gdal.GDT_Float32) 
             
             # Transform alltouch
@@ -2226,7 +2228,7 @@ def avgRegionQual(images, datesImg, maskedQual, weightsRaster=None, weightField=
             geoBase = baseImg.GetGeoTransform()
             reproject = [1 for a, b in zip(geoSmooth, geoBase) if not a == b]
             if reproject:
-                weightsRaster = warp_raster(weightsRaster, baseImg,
+                weightsRaster = rt.warpRaster(weightsRaster, baseImg,
                                             resampleOption='nearest',
                                             outputURI=None, outFormat='MEM')
         
@@ -2266,7 +2268,7 @@ def avgRegionQual(images, datesImg, maskedQual, weightsRaster=None, weightField=
             for yStep in range(yBlocks):
                 
                 # Read the block from the image
-                blockBase = readRasterBlock(baseImg,
+                blockBase = rt.readRasterBlock(baseImg,
                                             xStep * blockXSize, yStep * blockYSize,
                                             blockXSize, blockYSize)
                 
@@ -2280,7 +2282,7 @@ def avgRegionQual(images, datesImg, maskedQual, weightsRaster=None, weightField=
                 
                 if weightsRaster:
                     # Read the block from the weights
-                    blockWeight = readRasterBlock(weightsRaster,
+                    blockWeight = rt.readRasterBlock(weightsRaster,
                                                   xStep * blockXSize, yStep * blockYSize,
                                                   blockXSize, blockYSize)
                     
@@ -2303,7 +2305,7 @@ def avgRegionQual(images, datesImg, maskedQual, weightsRaster=None, weightField=
                 
                 # Remove the weights were the pixels are of low quality
                 if mask:
-                    maskBlock = readRasterBlock(maskImg,
+                    maskBlock = rt.readRasterBlock(maskImg,
                                             xStep * blockXSize, yStep * blockYSize,
                                             blockXSize, blockYSize)
                     blockWeight[maskBlock == -3000] = 0.
@@ -2381,9 +2383,9 @@ def maskQualityVI(ndviRaster, qualityRaster, outRaster=None, nodataOut=None):
             pass
         
         # Create an empty raster copy
-        out = new_raster_from_base(ndvi, outRaster, 'GTiff', nodataNdvi,
+        out = rt.newRasterFromBase(ndvi, outRaster, 'GTiff', nodataNdvi,
                                    getattr(gdal,
-                                           getGDALTypeFromNumber(
+                                           rt.getGDALTypeFromNumber(
                                                ndvi.GetRasterBand(1).DataType)))
         
         # Write to the new raster
@@ -2463,7 +2465,7 @@ def percMissingStack(images, outName, nodata=None):
         return(False)
     
     # Create an empty raster to host the final percentages
-    out = new_raster_from_base(toProcess[0], outName, 'GTiff', np.nan, gdal.GDT_Float32)
+    out = rt.newRasterFromBase(toProcess[0], outName, 'GTiff', np.nan, gdal.GDT_Float32)
     
     # Get the size of the rasters to identify the limits of the blocks to loop through
     band = toProcess[0].GetRasterBand(1)
@@ -2485,7 +2487,7 @@ def percMissingStack(images, outName, nodata=None):
             print('Processing block ' + str(progress) + ' of ' + str(totBlocks))
             progress += 1
             
-            blocks = [readRasterBlock(p, xStep * blockXSize, yStep * blockYSize, blockXSize, blockYSize) for p in toProcess]
+            blocks = [rt.readRasterBlock(p, xStep * blockXSize, yStep * blockYSize, blockXSize, blockYSize) for p in toProcess]
             
             # Bring the blocks together into one single array
             blocks = np.dstack(blocks)
@@ -2527,186 +2529,6 @@ def percMissing(block, nodata):
             outBlock[X, Y] = (pixel == nodata).sum() / tot
     
     return outBlock
-
-
-def warp_raster(src, dst, resampleOption='nearest', outputURI=None, outFormat='MEM'):
-    '''
-    Function : Warp a source raster to the resolution, extent and projection of a destination raster.
-           
-    The function returns the resulting raster. If outFormat is different from 'MEM', the 
-    raster is also saved to disk using the information provided in outputURI.
-    
-    
-    src (gdal Dataset): source raster to be warped
-    dst (gdal Dataset): destination raster that will provide the resolution, 
-        extent and projection
-    resampleOption (string): One of 'nearest', 'bilinear', 'cubic', 
-        'cubic spline', 'lanczos', 'average', or 'mode'. Method to use to 
-        resample the pixels of the source raster
-    outputURI (string, optional): Full address and name of the output raster. 
-        If outFormat is 'MEM',this argument is ignored and the function simply 
-        produces a raster in memory. 
-        The extension for the output file should match the outFormat.
-            
-    outFormat (string, optional): Format to use for the output raster from 
-        the function. 
-        Use 'GTiff' for a .tif output. Default creates a raster in memory.
-    '''
-    
-    if not type(src) is gdal.Dataset:
-        return False
-    
-    if not type(dst) is gdal.Dataset:
-        return False
-    
-    # Define resampling options
-    resampleOptions = {'nearest': gdalconst.GRA_NearestNeighbour, 'bilinear':gdalconst.GRA_Bilinear,
-                   'cubic':gdalconst.GRA_Cubic, 'cubic spline':gdalconst.GRA_CubicSpline,
-                   'lanczos':gdalconst.GRA_Lanczos, 'average':gdalconst.GRA_Average,
-                   'mode':gdalconst.GRA_Mode} 
-    
-    if not resampleOption in resampleOptions.keys():
-        return False
-    
-    nodata = src.GetRasterBand(1).GetNoDataValue()
-    if not nodata:
-        nodata = 0
-    
-    # Raster to host the warped output
-    if outFormat == 'MEM':
-        rOut = new_raster_from_base(dst, 'temp', 'MEM', nodata, src.GetRasterBand(1).DataType, bands=src.RasterCount)
-    else:
-        rOut = new_raster_from_base(dst, outputURI, outFormat, nodata, src.GetRasterBand(1).DataType, bands=src.RasterCount)
-    
-    # Warp: the parameters are source raster, destination raster, source projection, destination projection, resampling option 
-    gdal.ReprojectImage(src, rOut, src.GetProjection(), rOut.GetProjection(), resampleOptions[resampleOption])
-    
-    return rOut
-
-
-def readRasterBlock(src, colStart, rowStart, colBlockSize, rowBlockSize, band=1):
-    '''
-    Function to read a block of data from a gdal Dataset. It will return the block as a numpy array
-    
-    src (gdal Dataset): raster to extract the block from
-    xStart (int): X pixel value from which to start extraction (upper left corner)
-    yStart (int): Y pixel value from which to start extraction (upper left corner)
-    xBlockSize (int): X size of the block to extract. If the block is larger than the number 
-            of pixels from xStart, will extract up to the raster limit
-    yBlockSize (int): Y size of the block to extract. If the block is larger than the number 
-            of pixels from xStart, will extract up to the raster limit
-    band (int): band from which to extract the block. 1 by default.
-    '''
-    
-    # Get the wanted band
-    band = src.GetRasterBand(band)
-    
-    # Get the size of the raster
-    colSize = band.XSize
-    rowSize = band.YSize
-    
-    rows = min(rowBlockSize, rowSize - rowStart)
-    cols = min(colBlockSize, colSize - colStart)
-            
-    outArray = band.ReadAsArray(colStart, rowStart, cols, rows)
-    
-    return outArray
-
-
-def new_raster_from_base(base, outputURI, formatR, nodata, datatype, bands=None):
-    ''' 
-    Create an empty copy of a raster from an existing one.
-    The function returns a gdal raster variable filled with the nodata 
-    value.
-    
-    base (gdal raster layer): Name of the variable with the input raster 
-        to copy
-    outputURI (str): Address + name of the output raster (extension 
-        should agree with format, none for memory)
-    formatR (str): Format for the dataset (e.g. "GTiff", "MEM")
-    nodata (num): No data value (type should agree with raster type)
-    datatype (gdal data type): (e.g. gdal.GDT_Int32) Data type for the raster
-    bands [optional] (int): Number of bands for the output raster. 
-        If not specified, will use the number of bands of the input raster
-    '''
-    
-    cols = base.RasterXSize
-    rows = base.RasterYSize
-    projection = base.GetProjection()
-    geotransform = base.GetGeoTransform()
-    if not bands:
-        bands = base.RasterCount
-
-    driver = gdal.GetDriverByName(formatR)
-    
-    if formatR == "GTiff":
-        new_raster = driver.Create(str(outputURI), cols, rows, bands, datatype, options=['COMPRESS=LZW', 'BIGTIFF=IF_NEEDED'])
-    else:
-        new_raster = driver.Create(str(outputURI), cols, rows, bands, datatype)
-    new_raster.SetProjection(projection)
-    new_raster.SetGeoTransform(geotransform)
-
-    for i in range(bands):
-        new_raster.GetRasterBand(i + 1).SetNoDataValue(nodata)
-        new_raster.GetRasterBand(i + 1).Fill(nodata)
-
-    return new_raster
-
-
-def world2Pixel(geoMatrix, x, y):
-    """
-    Uses a gdal geomatrix (gdal.GetGeoTransform()) to calculate
-    the pixel location of a geospatial coordinate
-    Returns values based on origin and resolution of the raster. 
-    The actual values can fall outside of the raster and should be checked.
-    """
-    ulX = geoMatrix[0]
-    ulY = geoMatrix[3]
-    xDist = geoMatrix[1]
-    yDist = geoMatrix[5]
-    rtnX = geoMatrix[2]
-    rtnY = geoMatrix[4]
-    col = int((x - ulX) / xDist)
-    row = int((ulY - y) / xDist)
-    
-    return (col, row)
-
-
-def getGDALTypeFromNumber(nb):
-    '''
-    Takes the number representing the gdal data type and returns the actual
-    data type as a string.
-    '''
-    
-    if nb == 0:
-        out = 'GDT_Unknown'
-    elif nb == 1:
-        out = 'GDT_Byte'
-    elif nb == 2:
-        out = 'GDT_UInt16'
-    elif nb == 3:
-        out = 'GDT_Int16'
-    elif nb == 4:
-        out = 'GDT_UInt32'
-    elif nb == 5:
-        out = 'GDT_Int32'
-    elif nb == 6:
-        out = 'GDT_Float32'
-    elif nb == 7:
-        out = 'GDT_Float64'
-    elif nb == 8:
-        out = 'GDT_CInt16'
-    elif nb == 9:
-        out = 'GDT_CInt32'
-    elif nb == 10:
-        out = 'GDT_CFloat32'
-    elif nb == 11:
-        out = 'GDT_CFloat64'
-    elif nb == 12:
-        out = 'GDT_TypeCount'
-    
-    return(out)
-
 
 def plotModisLtavg(inDic, ltAvgStart, ltAvgEnd, dateStartChart, yearsPlot, outFolder):
     '''

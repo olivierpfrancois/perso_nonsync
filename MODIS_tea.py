@@ -60,8 +60,7 @@ def main():
     # Names of the regions (also folders names) 
     states = ["SLK"]
     # Varieties in each case
-    varieties = [['arabica'], ['arabica'], ['arabica'], ['arabica', 'robusta'],
-                 ['arabica'], ['arabica'], ['arabica'], ['arabica', 'robusta']]
+    varieties = [['tea']]
     # Addresses of the shapefiles with the boundaries for each of the regions
     # !!!!SHOULD BE IN EPSG 4326 PROJECTION
     statesBoundFiles = [dataDir + '/' + s + '/aoi/AOI_' + s + '.shp' for s in states] 
@@ -81,11 +80,11 @@ def main():
     # Process decision dummies
     
     # Download images
-    dload = True
+    dload = False
     # Mosaic images for each region and crop to extent 
-    mosaic = True
+    mosaic = False
     # Check quality 
-    checkQuality = True
+    checkQuality = False
     # Fill missing values and mask by exact AOI 
     fillMissing = True
     # Smooth images
@@ -148,7 +147,7 @@ def main():
     # Output folder for the images to fill
     outMissing = statesFilledFolder
     # Year(s) of images to fill
-    yearsMissing = [2017,2018]
+    yearsMissing = range(2005,2019)
     # Day(s) of images to fill
     daysMissing = None #[[49,65,81]]
     # Suffix to put at the end of the name of the 
@@ -181,26 +180,8 @@ def main():
     # The output model can have a different resolution, in which case the baseline will be produced with that resolution
     # maskBaseline = [['masks/LD_densities_coffee_from_classifications_250m.tif']]
     # outModelRaster = [['masks/LD_densities_coffee_from_classifications_1km.tif']]
-    maskBaseline = [[dst + '/CER/' + 'masks/CER_densities_arabica_from_classifications_250m.tif'],
-                    [dst + '/CHA/' + 'masks/CHA_densities_arabica_from_classifications_250m.tif'],
-                    [dst + '/CO/' + 'masks/CO_densities_arabica_from_classifications_250m.tif'],
-                    [dst + '/ES/' + 'masks/ES_densities_arabica_from_classifications_250m.tif',
-                            dst + '/ES/' + 'masks/ES_densities_robusta_from_classifications_250m.tif'],
-                    [dst + '/MO/' + 'masks/MO_densities_arabica_from_classifications_250m.tif'],
-                    [dst + '/SDM/' + 'masks/SDM_densities_arabica_from_classifications_250m.tif'],
-                    [dst + '/SP/' + 'masks/SP_densities_arabica_from_classifications_250m.tif'],
-                    [dst + '/ZM/' + 'masks/ZM_densities_arabica_from_classifications_250m.tif',
-                            dst + '/ZM/' + 'masks/ZM_densities_robusta_from_classifications_250m.tif']]
-    outModelRaster = [[dst + '/CER/' + 'masks/CER_densities_arabica_from_classifications_1km.tif'],
-                      [dst + '/CHA/' + 'masks/CHA_densities_arabica_from_classifications_1km.tif'],
-                      [dst + '/CO/' + 'masks/CO_densities_arabica_from_classifications_1km.tif'],
-                      [dst + '/ES/' + 'masks/ES_densities_arabica_from_classifications_1km.tif',
-                            dst + '/ES/' + 'masks/ES_densities_robusta_from_classifications_1km.tif'],
-                      [dst + '/MO/' + 'masks/MO_densities_arabica_from_classifications_1km.tif'],
-                      [dst + '/SDM/' + 'masks/SDM_densities_arabica_from_classifications_1km.tif'],
-                      [dst + '/SP/' + 'masks/SP_densities_arabica_from_classifications_1km.tif'],
-                      [dst + '/ZM/' + 'masks/ZM_densities_arabica_from_classifications_1km.tif',
-                            dst + '/ZM/' + 'masks/ZM_densities_robusta_from_classifications_1km.tif']]
+    maskBaseline = [[dst + '/SLK/' + 'masks/SLK_densities_tea_from_classifications_250m.tif']]
+    outModelRaster = [[dst + '/SLK/' + 'masks/SLK_densities_tea_from_classifications_1km.tif']]
     
     ############ RANKING 
     # Ranking individual dates modis images in terms of deciles using 
@@ -214,16 +195,7 @@ def main():
     minCoffee = [0.05, 0.15]
     # File to use for masking the output using the density
     # maskRank = [['masks/LD_densities_coffee_from_classifications_1km.tif']]
-    maskRank = [[dst + '/CER/' + 'masks/CER_densities_arabica_from_classifications_1km.tif'],
-                [dst + '/CHA/' + 'masks/CHA_densities_arabica_from_classifications_1km.tif'],
-                [dst + '/CO/' + 'masks/CO_densities_arabica_from_classifications_1km.tif'],
-                [dst + '/ES/' + 'masks/ES_densities_arabica_from_classifications_1km.tif',
-                    dst + '/ES/' + 'masks/ES_densities_robusta_from_classifications_1km.tif'],
-                [dst + '/MO/' + 'masks/MO_densities_arabica_from_classifications_1km.tif'],
-                [dst + '/SDM/' + 'masks/SDM_densities_arabica_from_classifications_1km.tif'],
-                [dst + '/SP/' + 'masks/SP_densities_arabica_from_classifications_1km.tif'],
-                [dst + '/ZM/' + 'masks/ZM_densities_arabica_from_classifications_1km.tif',
-                    dst + '/ZM/' + 'masks/ZM_densities_robusta_from_classifications_1km.tif']]
+    maskRank = [[dst + '/SLK/' + 'masks/SLK_densities_tea_from_classifications_1km.tif']]
     
     ############ AVERAGE
     # Starting and ending dates for the images to consider. Included
@@ -232,16 +204,7 @@ def main():
     #    If None, will default to today
     endAvg = None
     #Grid/Raster to use for the averaging --> FULL PATH!!!!!!!
-    avgWeights = [[dst + '/CER/masks/CER_densities_arabica_from_classifications_250m.tif'],
-                  [dst + '/CHA/masks/CHA_densities_arabica_from_classifications_250m.tif'],
-                  [dst + '/CO/masks/CO_densities_arabica_from_classifications_250m.tif'],
-                  [dst + '/ES/masks/ES_densities_arabica_from_classifications_250m.tif',
-                   dst + '/ES/masks/ES_densities_robusta_from_classifications_250m.tif'],
-                  [dst + '/MO/masks/MO_densities_arabica_from_classifications_250m.tif'],
-                  [dst + '/SDM/masks/SDM_densities_arabica_from_classifications_250m.tif'],
-                  [dst + '/SP/masks/SP_densities_arabica_from_classifications_250m.tif'],
-                  [dst + '/ZM/masks/ZM_densities_arabica_from_classifications_250m.tif',
-                   dst + '/ZM/masks/ZM_densities_robusta_from_classifications_250m.tif']]
+    avgWeights = [[dst + '/SLK/masks/SLK_densities_tea_from_classifications_250m.tif']]
     # Name of the field with the density information if the masks for averaging 
     #    are shapefiles 
     weightField = None
@@ -389,10 +352,11 @@ def main():
     if fillMissing:
         print('Starting interpolation of missing values')
         
+        fillIndex = {}
+        
         for s, b in zip(range(len(states)), statesBoundFiles):
             print('   Starting region ' + states[s])
-            if not s>4:
-                continue
+            
             inputRasters = [os.path.join(dst, states[s], inMissing, f) for 
                             f in os.listdir(os.path.join(dst, states[s], inMissing)) 
                             if f.endswith('.tif')]
@@ -409,28 +373,23 @@ def main():
             
             # Get the years for the files on disk
             years = [int(d.strftime('%Y')) for d in datesAll] 
-            '''
-            expans = gapfill.gapFill(rasters=inputRasters, seasons=days, years=years,
-                                     outFolder=os.path.join(dst, states[s], outMissing),
-                                     suffix=suffMissing, nodata=[-3000], iMax=20,
-                                     subsetSeasons=daysMissing, subsetYears=yearsMissing, 
-                                     subsetMissing=None, clipRange=(-2000, 10000), 
-                                     parallel=allowPara, nCores=nCores)
-            '''
+            
             if avgWeights[s]:
                 avgW = avgWeights[s]
             else:
                 avgW = None
-            expans = gapfill.gapFillTest(rasters=inputRasters, seasons=days, years=years,
+            fillIndex[states[s]] = gapfill.gapFill(rasters=inputRasters, seasons=days, years=years,
                             outFolder=os.path.join(dst, states[s], outMissing),
                             suffix=suffMissing, nodata=[-3000], iMax=27,
                             subsetSeasons=daysMissing, subsetYears=yearsMissing, subsetMissing=None,
                             clipRange=(-2000, 10000), maskRaster=avgW, 
                             parallel=allowPara, nCores=nCores)
             
-            with open(dst+"/test"+states[s]+".csv", "wb") as f:
-                exp = writer(f)
-                exp.writerows(expans)
+            with open(dst+"/test"+states[s]+".txt", "wb") as f:
+                dict_writer = DictWriter(f, ['date','value'], extrasaction='ignore', delimiter="\t", restval="0")
+                dict_writer.writeheader()
+                for p in fillIndex[states[s]][0]:
+                    dict_writer.writerow(p)
                 
             # Mask the resulting rasters to the specific extent of the AOI
             for r, y, d in zip(inputRasters, years, days):
