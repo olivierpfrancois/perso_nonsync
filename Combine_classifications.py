@@ -1,40 +1,56 @@
-from osgeo import ogr, gdal, osr, gdalconst
+from osgeo import gdal
 import os, re, csv, platform, sys
 import numpy as np
 import subprocess
+import raster_gedata_toolbox as rt
 
-def run_script(iface):
-    #Address of the folder with the classifications
-    classifFolder = '/media/olivier/olivier_ext/gedata_current/jde_coffee/data/Vietnam/LD/classifs'
+def combineClassif(orderClassif, classifFolder, legendFolder, tempFolder, 
+                   outClassifName, outLegendName, 
+                   legendPrefix='legend_', legendExt='.txt', legendDel='\t', 
+                   toNa=[]):
+    '''
+    Combine the classifications listed in the orderClassif file,
+    with the priorities listed in the file, and using the legends 
+    in the legend folder provided.
+    The legends should have the same name as the classifications, 
+    save for a potential prefix to be provided.
+    The output is a unified classification, with a unified legend, 
+    where classes with the same (exact) name have been combined.
+    All values that are not in the legends will be passed to missing.
     
-    #Address of the folder with the legends
-    legendFolder = '/media/olivier/olivier_ext/gedata_current/jde_coffee/data/Vietnam/LD/classifs/Legend'
-    
-    #Address of the folder for the temporary files
-    tempFolder = '/media/olivier/olivier_ext/gedata_current/temp'
-    
-    #Legend file names prefix to add to the classification names
-    legendPrefix = 'legend_'
-    #Legend file extensions: could be '.csv' or '.txt'
-    legendExt = '.csv'
-    #Legend file delimiter
-    legendDel = ','
-    
-    #Classes to pass to NA values in combining the classifications
-    #Leave an empty list if None
-    #These names should not include any trailing numbers if several categories have been made (e.g. Cloud1, Cloud2...)
-    toNa = ['cloud','shadow']
-    valuesNotInLegend = [0]
-    
-    #TAB delimited file with the priority order in which to combine the classifications
-    #The file should have two columns, the first is a priority number, the second the file name of the classification
-    orderClassif = '/media/olivier/olivier_ext/gedata_current/jde_coffee/data/Vietnam/LD/classifs/classif_priorities_LD.txt'
-    
-    #Ouput name and address for the combined files and legend
-    exportClassifName = '/media/olivier/olivier_ext/gedata_current/jde_coffee/data/Vietnam/LD/classifs/combined_classif_LD.tif'
-    exportLegendName = '/media/olivier/olivier_ext/gedata_current/jde_coffee/data/Vietnam/LD/classifs/legend_combined_classif_LD.txt'
-    
-    
+    orderClassif (str): Address of the file with the classifications 
+        names and the priorities for combining them. 
+        The file should be .txt and tab delimited.
+        It should have two columns, the first is the priority number and
+        the second is the base name of the classif, without extension.
+        The first row is considered as the column names.
+    classifFolder (str): Address of the folder containing the 
+        classifications to combine.
+    legendFolder (str): Address of the folder containing the
+        legends of the classifications. The legend files should
+        have the same name as the classifications, save for
+        a potential prefix.
+        CAPS do not matter, all category names will be passed 
+        to lower case.
+    tempFolder (str): Address of the temporary folder where
+        intermediate classifications can be saved during processing.
+    outClassifName (str): Full address of the output combined 
+        classification.
+        The function uses the value 255 as the no data value for the 
+        output.
+    outLegendName (str): Full address of the output legend. 
+        Should be a .txt.
+    legendPrefix (str): prefix used to differentiate the legends 
+        names from the classifications names.
+    legendExt (str): Extension of the legend files.
+    legendDel (str): Delimiter of the legend files.
+    toNa (list of str): Categories in the classifications 
+        to pass to no data in the output classification.
+        The names provided should match exactly the information
+        in the legend files.
+        These names should not include any trailing numbers 
+        if several categories have been made (e.g. Cloud for Cloud1, Cloud2...)
+    '''
     
     #Check the computer platform
     ordi = checkPlatform()
@@ -61,14 +77,14 @@ def run_script(iface):
     #Import all the legends into a list of dictionaries
     legends = []
     for nm in classifNames:
-        dict = {} #Will hold the legend values in format Value:Classname
+        dic = {} #Will hold the legend values in format Value:Classname
         with open(os.path.join(legendFolder,legendPrefix+nm+legendExt),'r') as f:
             next(f) # skip headings
             reader=csv.reader(f,delimiter=legendDel)
             for v,c in reader:
-                dict[int(v)] = re.sub('[0-9]*$','',c.lower())
+                dic[int(v)] = re.sub('[0-9]*$','',c.lower())
         #Add to the list
-        legends.append(dict)
+        legends.append(dic)
     
     #Establish a common legend for all the classifications
     #Get the unique class names and remove any of the categories being mapped to NA
@@ -78,7 +94,6 @@ def run_script(iface):
     commonLegend = {nm:i for i,nm in enumerate(sorted(commonLegend),1)}
     
     #Loop through the classifications, remove the clouds and shadows, and change the values to the common legend
-    
     for nm,legend in zip(classifNames,legends):
         
         if (os.path.isfile(os.path.join(classifFolder, nm+'.tif'))):
@@ -99,44 +114,26 @@ def run_script(iface):
         #Get the raster band
         classifBand = classifRaster.GetRasterBand(1)
         
-        #Get the no data value if any
-        nodata = int(classifBand.GetNoDataValue())
-        
         #Transform the band into a numpy array
         band = classifBand.ReadAsArray()
         band = band.astype(int)
         
-        #Get the values in the raster in sorted order
-        #(Get them all otherwise throws an error)
-        legendValues = legend.keys()
-        palette = list(legendValues)
-        if nodata:
-            palette.append(nodata)
-        if valuesNotInLegend:
-            for v in valuesNotInLegend:
-                palette.append(v)
-        palette = sorted(palette)
-        
-        #Create the key that gives the new values the palette should be mapped to
-        key = []
-        for v in palette:
-            if v in legendValues:
+        #Map the old values to the new common values
+        for v in np.unique(band):
+            if v in legend:
                 #Get the class name for that value
                 c = legend[v]
                 if c in toNa:
-                    key.append(255)
+                    replaceVal = 255
                 else:
-                    key.append(commonLegend[c])
+                    replaceVal = commonLegend[c]
             else:
-                key.append(255)
-        key = np.array(key)
-        
-        #Change the values in the raster
-        index = np.digitize(band, palette, right=True)
-        band = key[index]
+                replaceVal = 255
+            
+            band[band==v] = replaceVal
         
         #Create an empty raster to export the classification that was just mapped
-        outR = new_raster_from_base(classifRaster, tempFolder+'/reclass_'+nm+'.tif', 'GTiff', 255, gdal.GDT_Byte, bands=1)
+        outR = rt.newRasterFromBase(classifRaster, tempFolder+'/reclass_'+nm+'.tif', 'GTiff', 255, gdal.GDT_Byte, bands=1)
         
         #Write the re-classified values to the empty raster
         outR.GetRasterBand(1).WriteArray(band)
@@ -145,15 +142,12 @@ def run_script(iface):
         outR.FlushCache()
         outR = None
     
-    if os.path.isfile(exportClassifName):
-        os.remove(exportClassifName)
+    if os.path.isfile(outClassifName):
+        os.remove(outClassifName)
     
     #Stack the exported rasters 
-    #The processing command for merge does not allow to declare missing values...
-    #processing.runalg("gdalogr:merge", {"INPUT":";".join(tarNames), "PCT":False, 
-    #        "SEPARATE":True, "RTYPE":3, "OUTPUT":os.path.join(out,outName)})
     #Prepare the arguments for gdal_merge.py -- They all need to be strings
-    args = ['-n', '255', '-a_nodata', '255', '-of', 'GTiff', '-ot', 'Byte', '-co', 'COMPRESS:LZW', '-o', exportClassifName]
+    args = ['-n', '255', '-a_nodata', '255', '-of', 'GTiff', '-ot', 'Byte', '-co', 'COMPRESS:LZW', '-o', outClassifName]
     args.extend([tempFolder+'/reclass_'+nm+'.tif' for nm in reversed(classifNames)])
     
     if ordi == "Linux":
@@ -167,67 +161,21 @@ def run_script(iface):
         gm.main()
     
     #Export the common legend to a txt file
-    with open(exportLegendName, "wb") as f:
+    #Get the categories in order
+    outLegend = {}
+    outCat = []
+    for k,v in commonLegend.iteritems():
+        outLegend[v] = k
+        outCat.append(v)
+    outCat.sort()
+    with open(outLegendName, "wb") as f:
         f.write('%s\t%s\n' % ('code', 'classname'))
-        for k,v in commonLegend.iteritems():
-            f.write('%s\t%s\n' % (v,k))
+        for c in outCat:
+            f.write('%s\t%s\n' % (c,outLegend[c]))
     
     #Clean the temp folder
     for nm in classifNames:
         os.remove(tempFolder+'/reclass_'+nm+'.tif')
-    
-    
-def new_raster_from_base(base, outputURI, formatD, nodata, datatype, bands=None):
-    """
-    ---------------------------------------------------------------------------------------------
-    Function : Create an empty copy of a raster from an existing one
-               
-    Arguments : 
-
-    - base: gdal raster layer
-        Name of the variable with the input raster to copy
-    
-    - outputURI: string
-        Address + name of the output raster (extension should agree with format, none for memory)
-        
-    - formatD: string
-        Format for the dataset (e.g. "GTiff", "MEM") 
-    
-    - nodata: int/float
-        No data value (type should agree with raster type)
-    
-    - datatype: gdal data type (e.g. gdal.GDT_Int32)
-        Data type for the raster
-    
-    - bands: [optional] int
-        Number of bands for the output raster. 
-        If not specified, will use the number of bands of the input raster
-    
-    Return value : A gdal raster variable filled with the nodata value
-    ---------------------------------------------------------------------------------------------
-    """    
-    
-    cols = base.RasterXSize
-    rows = base.RasterYSize
-    projection = base.GetProjection()
-    geotransform = base.GetGeoTransform()
-    if not bands:
-        bands = base.RasterCount
-
-    driver = gdal.GetDriverByName(formatD)
-    
-    if formatD == "GTiff":
-        new_raster = driver.Create(str(outputURI), cols, rows, bands, datatype, options=['COMPRESS=LZW'])
-    else:
-        new_raster = driver.Create(str(outputURI), cols, rows, bands, datatype)
-    new_raster.SetProjection(projection)
-    new_raster.SetGeoTransform(geotransform)
-
-    for i in range(bands):
-        new_raster.GetRasterBand(i + 1).SetNoDataValue(nodata)
-        new_raster.GetRasterBand(i + 1).Fill(nodata)
-
-    return new_raster
 
 def do_message(msgType, msgStr):
     """
@@ -251,3 +199,22 @@ def checkPlatform():
         return
     
     return(currentPlatform)
+
+
+if __name__=='__main__':
+    
+    root = '/media/olivier/olivier_ext1/gedata_current/jde_coffee/MODIS/collection6/terra/Tea/data/SLK/classifs'
+    
+    combineClassif(
+        orderClassif=root+'/classif_priorities_SLK.txt', 
+        classifFolder=root, 
+        legendFolder=root+'/Legend', 
+        tempFolder='/media/olivier/olivier_ext1/gedata_current/temp', 
+        outClassifName=root+'/combined_classif_SLK.tif', 
+        outLegendName=root+'/legend_combined_classif_SLK.txt', 
+        legendPrefix='legend_', 
+        legendExt='.csv',
+        legendDel=',', 
+        toNa=['cloud','shadow'])
+    
+    
