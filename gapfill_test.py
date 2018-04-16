@@ -6,7 +6,7 @@ from statsmodels.distributions.empirical_distribution import ECDF
 import scipy.stats as ss
 import pandas as pd
 import statsmodels.formula.api as smf
-import MODIS_gedata_toolbox as md
+import raster_gedata_toolbox as rt
 import os, re, multiprocessing
 import pathos.multiprocessing as pmp
 import functools, time
@@ -39,7 +39,7 @@ def arrayAroundRasters(rasters, seasons, years, mp, size, nodata=None):
     
     returns a numpy array with the size dimension
     '''
-    
+    t0 = time.time()
     # Get the max and min positions inside the rasters
     minX = max(0, mp[0] - size[0])
     maxX = mp[0] + size[0] + 1
@@ -63,7 +63,8 @@ def arrayAroundRasters(rasters, seasons, years, mp, size, nodata=None):
     # Get the max and min year positions
     minYear = max(0, Y.index(mp[3]) - size[3])
     maxYear = min(len(Y) - 1, Y.index(mp[3]) + size[3] + 1)
-    
+    print('time setup %s' % (time.time() - t0))
+    t0 = time.time()
     # Subset the list and get the position of the raster of interest
     subset = []
     i = 0
@@ -84,14 +85,16 @@ def arrayAroundRasters(rasters, seasons, years, mp, size, nodata=None):
             elif y == mp[3]:
                 if s < mp[2]:
                     i += 1
-    
-    block = [md.readRasterBlock(src=r,
+    print('time stack %s' % (time.time() - t0))
+    t0 = time.time()
+    block = [rt.readRasterBlock(src=r,
                                 colStart=minY,
                                 rowStart=minX,
                                 colBlockSize=maxY - minY,
                                 rowBlockSize=maxX - minX,
                                 band=1) for r in subset]
-    
+    print('time read %s' % (time.time() - t0))
+    t0 = time.time()
     block = np.dstack(block)
     
     # Change the no data values
@@ -108,7 +111,7 @@ def arrayAroundRasters(rasters, seasons, years, mp, size, nodata=None):
     # Close the rasters
     for r in subset:
         r = None
-    
+    print('time finish %s' % (time.time() - t0))
     return [block, pos]
 
 
@@ -303,16 +306,16 @@ def gapFill(rasters, seasons, years, outFolder, suffix, nodata=None,
             
             # Loop through the missing data to replace in r
             if not parallel:
-                t0 = time.time()
+                # t0 = time.time()
                 mpsFill = [gapFillOnePixel(pixel=pixel, season=s, year=y,
                                     files=rasters, seasons=seasons,
                                     years=years, replaceVal=replaceVal,
                                     nodataIn=nodata[0], nodataOut=nodataOut,
                                     clipRange=clipRange, iMax=iMax) 
                                            for pixel in mps]
-                print('time gapfillone %s' % (time.time() - t0))
+                # print('time gapfillone %s' % (time.time() - t0))
             else:
-                t0 = time.time()
+                # t0 = time.time()
                 pp = functools.partial(gapFillOnePixel, season=s,
                                        year=y, files=rasters,
                                        seasons=seasons, years=years,
@@ -320,9 +323,9 @@ def gapFill(rasters, seasons, years, outFolder, suffix, nodata=None,
                                        nodataIn=nodata[0],
                                        nodataOut=nodataOut,
                                        clipRange=clipRange, iMax=iMax)
-                
+                print(mps)
                 mpsFill = p.map(pp, mps)
-                print('time gapfillone parallel %s' % (time.time() - t0))
+                # print('time gapfillone parallel %s' % (time.time() - t0))
             # Replace the fitted value in the raster
             for z in mpsFill:
                 r[z[0], z[1]] = z[4]
@@ -334,8 +337,8 @@ def gapFill(rasters, seasons, years, outFolder, suffix, nodata=None,
             
             if os.path.isfile(outName):
                 os.remove(outName)
-            t0 = time.time()
-            outR = md.new_raster_from_base(dst, outName,
+            # t0 = time.time()
+            outR = rt.newRasterFromBase(dst, outName,
                                       'GTiff', nodataOut, gdal.GDT_Float32)
             
             outR.GetRasterBand(1).WriteArray(r)
@@ -343,7 +346,7 @@ def gapFill(rasters, seasons, years, outFolder, suffix, nodata=None,
             outR.FlushCache()
             outR = None
             dst = None
-            print('time export %s' % (time.time() - t0))
+            # print('time export %s' % (time.time() - t0))
             # Prepare the expansion values for export. These values
             # provide some information on the difficulty to 
             # interpolate the pixels
@@ -371,11 +374,11 @@ def gapFillOnePixel(pixel, season, year, files, seasons, years, replaceVal,
     mp = pixel + [season, year]
     
     i = 0 
-    t0 = time.time()
+    
     a = gapSubset(rasters=files, seasons=seasons, years=years,
                  mp=mp, i=i, initialSize=[5, 5, 1, 3],
                  nodata=replaceVal)
-    print('gapSubset %s' % (time.time() - t0))
+    
     z = 1500.
     '''
     # Predict the value
