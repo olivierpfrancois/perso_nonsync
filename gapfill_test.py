@@ -6,7 +6,7 @@ from statsmodels.distributions.empirical_distribution import ECDF
 import scipy.stats as ss
 import pandas as pd
 import statsmodels.formula.api as smf
-import raster_gedata_toolbox as rt
+import gedata_tbox_raster as rt
 import os, re, multiprocessing
 import pathos.multiprocessing as pmp
 import functools, time

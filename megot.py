@@ -2,7 +2,7 @@ from osgeo import ogr, gdal, osr, gdalconst
 from csv import DictWriter
 import os, processing, re, csv, platform, sys, subprocess
 import numpy as np
-import raster_gedata_toolbox as rt
+import gedata_tbox_raster as rt
 sys.path.append('C:/Users/Olivier/OlivierGithub/QGIS-scripts')
 import image_proc_functions as img
 

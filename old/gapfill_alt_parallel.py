@@ -6,7 +6,7 @@ from statsmodels.distributions.empirical_distribution import ECDF
 import scipy.stats as ss
 import pandas as pd
 import statsmodels.formula.api as smf
-import MODIS_gedata_toolbox as md
+import gedata_tbox_MODIS as md
 <<<<<<< Updated upstream:gapfill.py
 import os, re, multiprocessing
 import pathos.multiprocessing as mp

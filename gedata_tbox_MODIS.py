@@ -15,12 +15,18 @@ import re, os
 #import multiprocessing
 import pathos.multiprocessing as mp
 from datetime import datetime, timedelta
-from osgeo import gdal, gdalconst, ogr
+from osgeo import gdal, ogr
 import numpy as np
-import functools
+import functools, math
+import gedata_tbox_raster as rt
+import mpl_toolkits
+mpl_toolkits.__path__.append('/usr/lib/python2.7/dist-packages/mpl_toolkits/')
 import matplotlib.pyplot as plt
 from matplotlib import cm, dates
-import raster_gedata_toolbox as rt
+from mpl_toolkits.basemap import Basemap, pyproj
+import matplotlib as mpl
+import matplotlib.colors as col
+import matplotlib.patheffects as pe
 # import warnings
 # warnings.filterwarnings('error')
 
@@ -2672,4 +2678,214 @@ def plotModisLtavg(inDic, ltAvgStart, ltAvgEnd, dateStartChart, yearsPlot, outFo
         #Save to disk
         plt.savefig(outFolder+'/'+V+'_CHI_annual_profiles_diff_to_long_term.png', dpi=100)
         
+def mapModisRanking(mapSize, mapTitle, mapFile,
+                    boundaryFile, notePosition, 
+                    noteSize, legendPosition, 
+                    legendSizes, outName, 
+                    outRes=200, backgroundLabel='',
+                    citiesFile=None, citiesField=None,
+                    citiesLabelSize=None, 
+                    citiesMarkerSize=None, 
+                    scaleLen=100, scaleSize=12, 
+                    scalePosition=(0.6,0.01)):
+    
+    '''
+    Maps the ranking raster and export to file
+    
+    mapSize (tuple of num): Size of the ap in inches
+    mapTitle (str): Title of the map 
+    mapFile (str): Full address of the raster with 
+        the ranking information
+    boundaryFile (str): Full address of the shapefile 
+        with the boundaries information
+    notePosition (tuple of num): Two values between 0 and 
+        1 giving the position of the top left corner of the 
+        note on the chart. 
+        The value are relative to the chart, so (0,0) is the
+        bottom left corner and (1,1) is the top right corner. 
+    legendPosition (tuple of num): Two values giving the 
+        position of the legend. Same as notePosition
+    outName (str): Full address of the output name for the
+        chart (.png)
+    outRes (int): Dpi resolution for the output chart
+    backgroundLabel (str): Label for the white background
+        pixels
+    citiesFile (str): Full address of the shapefile with the 
+        information on the cities.
+    citiesField (str): Name of the field in the shapefile with 
+        name of the cities to use as label
+    citiesLabelSize (int): Size of the labels
+    '''
+
+    #Create new figure window
+    fig = plt.figure(figsize=mapSize)  # a new figure window
+    ax = fig.add_subplot(1, 1, 1)  # specify (nrows, ncols, axnum)
+    
+    #Remove frame of subplot
+    ax.axis('off')
+    
+    #Add title
+    ax.set_title(mapTitle, fontsize=12, 
+                 weight='bold', y=1.02)
+    
+    # Read the data and metadata
+    datafile = gdal.Open(mapFile)
+    bnd1 = datafile.GetRasterBand(1).ReadAsArray()
+    
+    #Get no data value
+    nodata = datafile.GetRasterBand(1).GetNoDataValue()
+    
+    #Change data type and remove no data value from raster
+    bnd1 = bnd1.astype(float)
+    bnd1[bnd1==nodata] = np.nan
+    
+    #Get raster size, projection, and resolution
+    nx = datafile.RasterXSize # Raster xsize
+    ny = datafile.RasterYSize # Raster ysize
+    gt = datafile.GetGeoTransform()
+    xres = gt[1]
+    yres = gt[5]
+    
+    # get the edge coordinates and add half the resolution 
+    # to go to center coordinates
+    xmin = gt[0] + xres * 0.5
+    xmax = gt[0] + (xres * nx) - xres * 0.5
+    ymin = gt[3] + (yres * ny) + yres * 0.5
+    ymax = gt[3] - yres * 0.5
+    
+    # create a grid of lat/lon coordinates in the original projection
+    (lon_source,lat_source) = np.mgrid[xmin:xmax+xres:xres, ymax+yres:ymin:yres]
+    
+    #Create the basemap
+    edge = ((xmax-xmin)*0.03,(ymax-ymin)*0.03) #Add an edge around the raster
+    mapR = Basemap(projection='cyl',llcrnrlat=ymin-edge[1],urcrnrlat=ymax+edge[1],\
+                llcrnrlon=xmin-edge[0],urcrnrlon=xmax+edge[0] , resolution='i', ax=ax)
+    
+    #Prepare the color map
+    #Colors and values for scale
+    colorsScale = [(255,254,141),(239,48,166),(197,38,182),(113,28,198),(19,0,236),(28,67,198),(5,251,255)]
+    stopsScale = [-3,10,30,50,70,90,110]
+    #Normalize the colors to 0-1
+    norm = mpl.colors.Normalize(vmin=0.,vmax=255.)
+    colorsScale = [tuple(norm(v) for v in T) for T in colorsScale]
+    #Normalize the values for the scale
+    norm = mpl.colors.Normalize(vmin=-3.,vmax=110.)
+    stopsScale = [norm(v) for v in stopsScale]
+    #Combine into color scale for mapping
+    purpleBlue = zip(stopsScale,colorsScale)
+    #Create the segmented color map
+    purpleBlueLinear = col.LinearSegmentedColormap.from_list('purpleBlue',purpleBlue, N=256, gamma=1.0)
+    #Create labels for colormap
+    purpleBlueLabels = ['Below min', 
+                        'Min of the 10 ref. years',
+                        '',
+                        'Median of the 10 ref. years',
+                        '',
+                        'Max of the 10 ref. Years',
+                        'Above max']
+    
+    # project in the original Basemap and plot with pcolormesh
+    mapR.pcolormesh(lon_source,lat_source,bnd1.T, cmap=purpleBlueLinear)
+    
+    #Add boundary
+    
+    aoi_info = mapR.readshapefile(re.sub('.shp$','',boundaryFile), 
+                                  'aoi', color='black',
+                                  linewidth=1.2)
+    
+    if citiesFile:
+        #Add major cities
+        cities_info = mapR.readshapefile(re.sub('.shp$','',citiesFile), 
+                                         'cities')
         
+        #Add the city names as labels
+        cityFont = {'fontname':'Arial', 'size':str(citiesLabelSize), 
+                    'color':'black', 'weight':'bold'}
+        for info, city in zip(mapR.cities_info, mapR.cities):
+            mapR.plot(city[0], city[1], marker='o', 
+                      color='black', markersize=citiesMarkerSize, 
+                      markeredgewidth=2) #'o' for circle, '.' for point
+            plt.text(city[0]+0.015, city[1]+0.015, 
+                     unicode(info[citiesField], 'utf-8'), 
+                     path_effects=[pe.withStroke(linewidth=2, 
+                                                 foreground="white")], 
+                     **cityFont)
+            #The path effect adds a buffer around the letters for legibility
+    
+    #Add scale bar
+    scaleParam = {'startLon': xmin+(xmax-xmin)*scalePosition[0], 
+                  'startLat': ymin+(ymax-ymin)*scalePosition[1],
+                  'lengthKm': scaleLen, 
+                  'yoffset': 0.02}
+    #Get initial lon lat in map units
+    lon1,lat1 = mapR(scaleParam['startLon'],scaleParam['startLat'],inverse=True)
+    #Get final lon lat from distance
+    gc = pyproj.Geod(a=mapR.rmajor,b=mapR.rminor)
+    lon2, lat2, az = gc.fwd(lon1,lat1,90,scaleParam['lengthKm']*1000)
+    #Get back the final lon lat in map units
+    x2,y2 = mapR(lon2,lat2,inverse=False)
+    #Plot the lines for the scale
+    barHeight = abs(scaleParam['startLon']-x2)/100.
+    mapR.plot([scaleParam['startLon'],x2],
+              [scaleParam['startLat'],scaleParam['startLat']],color='k')
+    mapR.plot([scaleParam['startLon'],scaleParam['startLon']],
+              [scaleParam['startLat']-barHeight,
+               scaleParam['startLat']+barHeight],color='k')
+    mapR.plot([x2,x2],
+              [scaleParam['startLat']-barHeight,
+               scaleParam['startLat']+barHeight],color='k')
+    scaleFont = {'fontname':'Arial', 'size':scaleSize, 'color':'black', 'weight':'normal', 
+                 'horizontalalignment':'center'}
+    plt.text(scaleParam['startLon'],scaleParam['startLat']+barHeight+0.01,
+             '0', **scaleFont)
+    plt.text(x2,scaleParam['startLat']+barHeight+0.01,
+             '%s km' %(scaleParam['lengthKm']),    
+             **scaleFont)
+    
+    
+    #Add note
+    commentFont = {'fontname':'Arial', 'size':noteSize, 'color':'black'}
+    comment = 'Notes:'\
+        '\n--Most pixels contain other land uses \nbesides coffee.'\
+        '\n--The index shows health of vegetation in \neach pixel compared to reference years, \n'\
+        'not coffee production directly. '\
+        '\n--Vegetative health is affected mostly by \n'\
+        'natural factors (rain, etc.) but can also be \naffected by human intervention (pruning, \netc.).'
+    plt.text(notePosition[0], notePosition[1], comment, 
+             horizontalalignment='left',
+             verticalalignment='center',
+             transform = fig.transFigure, #ax.transAxes for position relative to axes 
+             **commentFont)
+    
+    #Prepare color legend
+    if backgroundLabel:
+        cmap = mpl.colors.ListedColormap([(1,1,1)]+colorsScale)
+        #bounds = range(len(colorsScale)+1)
+    else:
+        cmap = mpl.colors.ListedColormap(colorsScale)
+    bounds = range(cmap.N+1)
+    norm = mpl.colors.BoundaryNorm(bounds, cmap.N)
+    #Add axis for the color legend
+    legendFont = {'fontsize': legendSizes[1],
+                  'fontweight': 'normal',
+                  'verticalalignment': 'center'}
+    axColors = fig.add_axes([legendPosition[0],legendPosition[1], 0.03, 0.18]) #left, bottom, width, height] in fractions of figure width and height
+    cb = mpl.colorbar.ColorbarBase(axColors, cmap=cmap,
+                                    norm=norm,
+                                    boundaries=bounds,
+                                    ticks=[y+0.5 for y in range(cmap.N+1)],
+                                    spacing='uniform',
+                                    orientation='vertical')
+    cb.ax.set_title('Legend', fontsize=legendSizes[0], weight='bold', x=0.7, y=1.05)
+    axColors.tick_params(axis=u'both', which=u'both',length=0)
+    if backgroundLabel:
+        legendLabels = [backgroundLabel]+purpleBlueLabels
+    else:
+        legendLabels = purpleBlueLabels
+    axColors.set_yticklabels(legendLabels, fontdict=legendFont)
+    
+    #Fit layout for smaller image
+    plt.tight_layout()
+    
+    #Save plot
+    plt.savefig(outName,dpi=outRes)

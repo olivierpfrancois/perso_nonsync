@@ -15,7 +15,7 @@ from osgeo import gdal, ogr
 import os, re, osr
 import numpy as np
 from csv import DictWriter
-import raster_gedata_toolbox as rt
+import gedata_tbox_raster as rt
 
 sys.path.append('/home/olivier/OlivierGithub/QGIS-scripts') #('C:/Users/Olivier/OlivierGithub')
 import projection_function as proj

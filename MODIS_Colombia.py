@@ -8,12 +8,12 @@ sys.dont_write_bytecode = True
 import os, re
 from datetime import datetime, timedelta
 from osgeo import gdal
-import MODIS_gedata_toolbox as md
+import gedata_tbox_MODIS as md
 reload(md)
 #import contextlib as context
 # from xml.dom import NoDataAllowedErr
 # from contextlib import contextmanager
-import raster_gedata_toolbox as rt
+import gedata_tbox_raster as rt
 
 sys.path.append('/home/olivierp/OlivierGithub/QGIS-scripts')
 import image_proc_functions as img_proc

@@ -24,7 +24,7 @@ sys.dont_write_bytecode = True
 import os, re, multiprocessing
 #import pathos.multiprocessing as mp
 import pathos as pa
-import MODIS_gedata_toolbox as md  # GEDATA toolbox for MODIS related tools
+import gedata_tbox_MODIS as md  # GEDATA toolbox for MODIS related tools
 import gapfill  # Python implementation of the interpolation algorithm
 from datetime import datetime, timedelta
 from csv import DictWriter, writer
@@ -34,6 +34,55 @@ def main():
     #####################################################################################################################
     #####################################################################################################################
     # #PARAMETERS
+    
+    ###Update parameters
+    
+    # Process decision dummies
+    
+    # Download images
+    dload = False
+    # Mosaic images for each region and crop to extent 
+    mosaic = False
+    # Check quality 
+    checkQuality = False
+    # Fill missing values and mask by exact AOI 
+    fillMissing = False
+    # Smooth images
+    smooth = False
+    # Create baselines
+    createBaselines = False
+    # Rank individual images against baseline images
+    ranking = False
+    # Average MODIS value in each region
+    avgValue = False
+    #Additional options with the average
+    # Compute the quality information to inform the 
+    # average values for each region
+    qualIndex = True
+    #Create charts of the differential to the long term
+    chartDiff = True
+    #Create maps of the ranking rasters by date
+    mapDiff = True
+    
+    ########### DOWNLOAD
+    # Start date for the product download (format YYYY-MM-DD)
+    #    If None, will default to date of most recent MODIS file on disk if any, or stop the process
+    startDownload = '2018-03-01'
+    
+    ############ FILL MISSING
+    # Year(s) of images to fill
+    yearsMissing = [2017,2018]
+    # Day(s) of images to fill
+    daysMissing = None #[[49,65,81]]
+    
+    ############ MAPPING
+    #Dates to map
+    mapDates = ['2018-03-22']
+    
+    
+    
+    
+    ###Long term parameters
     
     # Allow parallel computing?
     allowPara = True
@@ -79,30 +128,6 @@ def main():
     statesRefFolder = 'baseline'
     
     # Process decision dummies
-    
-    # Download images
-    dload = False
-    # Mosaic images for each region and crop to extent 
-    mosaic = False
-    # Check quality 
-    checkQuality = True
-    # Fill missing values and mask by exact AOI 
-    fillMissing = False
-    # Smooth images
-    smooth = False
-    # Create baselines
-    createBaselines = False
-    # Rank individual images against baseline images
-    ranking = False
-    # Average MODIS value in each region
-    avgValue = False
-    #Additional options with the average
-    # Compute the quality information to inform the 
-    # average values for each region
-    qualIndex = True
-    #Create charts of the differential to the long term
-    chartDiff = True
-    
     # Get the percentage of missing values for each pixel across history
     checkPercMissing = False
     #maskLand = False
@@ -121,7 +146,7 @@ def main():
     tiles = ['h28v07']  # ['h28v07']
     # Start date for the product download (format YYYY-MM-DD)
     #    If None, will default to date of most recent MODIS file on disk if any, or stop the process
-    startDownload = '2018-02-01'  # '2017-05-26'
+    #startDownload = '2018-02-01'  # '2017-05-26'
     # End date for the product download (format YYYY-MM-DD)
     #    If None, defaults to today
     endDownload = None
@@ -130,7 +155,7 @@ def main():
     # Starting date for the files to mosaic
     #    If None, will default to the files that have been just downloaded if 
     #    any.
-    startMosaic = '2018-02-01'
+    startMosaic = startDownload #'2018-02-01'
     # startMosaic = '2005-01-01'
     # Ending date for the files to mosaic
     #    If None, defaults to today
@@ -142,7 +167,7 @@ def main():
     # Output folder of the images to mask
     outCheck = statesMaskedFolder
     # Start date for the files to check
-    startCheck = '018-03-15' #'2018-02-01'
+    startCheck = startDownload #'2018-02-01'
     # End date for the files to check
     endCheck = None
     
@@ -152,9 +177,9 @@ def main():
     # Output folder for the images to fill
     outMissing = statesFilledFolder
     # Year(s) of images to fill
-    yearsMissing = [2017,2018]
+    #yearsMissing = [2017,2018]
     # Day(s) of images to fill
-    daysMissing = [[49,65,81],[49,65,81]]
+    #daysMissing = [[49,65,81],[49,65,81]]
     # Suffix to put at the end of the name of the 
     # images after filling
     suffMissing = 'f'
@@ -166,13 +191,18 @@ def main():
     avgWindow = 3
     # Starting date for the files to include as input in the smoothing process
     #    If None, defaults to 1 year before the end smoothing date
-    startSmooth = '2016-05-15'  # '2012-03-01'
+    d = datetime.strptime(startDownload, '%Y-%m-%d').date()
+    startSmooth = d - timedelta(days=365*2)
+    startSmooth = startSmooth.strftime('%Y-%m-%d')
+    #startSmooth = '2016-05-15'
     # Ending date for the files to include as input in the smoothing process
     #    If None, defaults to today
     endSmooth = None
     # Start and end dates for the files to save to the disk after smoothing
     #    If None, defaults to 6 months before end smoothing date
-    startSaveS = '2017-07-01'
+    startSaveS = d - timedelta(days=365)
+    startSaveS = startSaveS.strftime('%Y-%m-%d')
+    #startSaveS = '2017-07-01'
     # startSaveS = '2017-03-01'
     endSaveS = None  # None to save them up to the end smoothing date
     
@@ -193,7 +223,9 @@ def main():
     #    the baselines
     # Starting and ending dates for the images to consider. Included
     #   If None, will default to 60 days before the endRank date
-    startRank = '2017-12-01'
+    startRank = d - timedelta(days=125)
+    startRank = startRank.strftime('%Y-%m-%d')
+    #startRank = '2017-12-01'
     #   If None, will default to today
     endRank = None
     # Minimum density of coffee to consider 
@@ -213,6 +245,39 @@ def main():
     # Name of the field with the density information if the masks for averaging 
     #    are shapefiles
     weightField = None
+    
+    ############ MAPPING
+    #Dates to map
+    #mapDates = ['2018-03-22']
+    # % of coffee masks to map out (the rasters for each should have been prepared in advance
+    modisPct = ['5', '15']
+    # Destination folder for the maps from the modisPrefix
+    destFolder = os.path.join(dst,'maps')
+    # Size of the maps for each region
+    mapSizes = [(11,8)] #Roughly A4
+    # Titles for each of the modis maps, to which the modis date will be added at the end
+    mapTitles = [['Lam Dong Crop Health Index \nComparison to 11y History (2006-2016) \nCoffee, ']]
+    # Name of the boundary shapefile for each of the states
+    boundaries = ['aoi/AOI_LD.shp']
+    #Position of the note in each map
+    notePositions = [(0.05, 0.12)]
+    #Size of the note font
+    noteFont = 8
+    #Position of the legend in each map
+    legendPositions = [(0.05, 0.22)]
+    #Size of the legend title and labels fonts
+    legendFonts = (12,10)
+    # Name of the shapefile with the cities for each of the states
+    cities = ['LD_cities.shp']
+    citiesField = ['name']
+    #Size of the labels and markers for the cities
+    citiesLabelSizes = [12]
+    citiesMarkerSizes = [3]
+    #Scale parameeters
+    scaleLen = [100] #in km
+    scaleFont = 10
+    scalePositions = [(0.65,0.01)]
+    
     
     #####################################################################################################################
     #####################################################################################################################
@@ -390,10 +455,15 @@ def main():
                                                    clipRange=(-2000, 10000), maskRaster=avgW, 
                                                    parallel=allowPara, nCores=nCores)
             
-            #fillIndex[states[s]] = expans
-            #with open("/home/olivier/Desktop/test.csv", "wb") as f:
-            #    exp = writer(f)
-            #    exp.writerows(expans)
+            out = []
+            for p, v in fillIndex[states[s]][0].iteritems():
+                d = datetime.strptime(p, '%j-%Y').date()
+                out.append({'date':d.strftime('%Y-%m-%d'), 'value':v})
+            with open(dst + "/test" + states[s] + ".txt", "wb") as f:
+                dict_writer = DictWriter(f, ['date', 'value'], extrasaction='ignore', delimiter="\t", restval="0")
+                dict_writer.writeheader()
+                for p in out:
+                    dict_writer.writerow(p)
             
             # Mask the resulting rasters to the specific extent of the AOI
             for r, y, d in zip(inputRasters, years, days):
@@ -548,7 +618,7 @@ def main():
                             if not k in qualityMasked:
                                 qualityMasked[k] = {}
                                 qualityMasked[k]['date'] = k
-                            if k in qualMasked.keys():
+                            if k in qualMasked:
                                 qualityMasked[k][states[r] + '_' + varieties[r][v]] = qualMasked[k]
                             else:
                                 qualityMasked[k][states[r] + '_' + varieties[r][v]] = ' '
@@ -557,10 +627,27 @@ def main():
                             if not k in qualityFilled:
                                 qualityFilled[k] = {}
                                 qualityFilled[k]['date'] = k
-                            if k in qualFilled.keys():
+                            if k in qualFilled:
                                 qualityFilled[k][states[r] + '_' + varieties[r][v]] = qualFilled[k]
                             else:
                                 qualityFilled[k][states[r] + '_' + varieties[r][v]] = ' '
+        
+        #Prepare the filling quality information for export
+        if fillMissing:
+            outFill = {}
+            for r in range(len(states)):
+                for v in range(len(varieties[r])):
+                    for p, v in fillIndex[states[r]][v].iteritems():
+                        d = datetime.strptime(p, '%j-%Y').date()
+                        d = d.strftime('%Y-%m-%d')
+                        if d in qualMasked:
+                            if not d in outFill:
+                                outFill[d] = {}
+                                outFill[d][states[r] + '_' + varieties[r][v] + '_Q'] = (
+                                    1 - (qualMasked[d]/0.8^(1-qualMasked[d]) + v/0.5^(1-v))/2.
+                                    )
+                
+                    colnames.append(states[r] + '_' + varieties[r][v] + '_Q')
         
         # Sort the dates and get min and max
         datesAll = [datetime.strptime(d, '%Y-%m-%d').date() for d in datesAll]
@@ -574,7 +661,11 @@ def main():
         # order the output by date in a list. Each element is an element of the original dictionary and will be exported
         out = []
         for date in datesAll:
-            out.append(averages[date.strftime('%Y-%m-%d')])
+            if fillMissing:
+                if date.strftime('%Y-%m-%d') in outFill:
+                    out.append(averages[date.strftime('%Y-%m-%d')]+outFill[date.strftime('%Y-%m-%d')])
+            else:
+                out.append(averages[date.strftime('%Y-%m-%d')])
         # Export the dictionary
         with open(os.path.join(dst, outNm), "w") as f:
             dict_writer = DictWriter(f, ['date'] + colnames, extrasaction='ignore', delimiter="\t", restval="0")
@@ -617,6 +708,41 @@ def main():
                               dateStartChart='01-01', yearsPlot=range(2010,2019), 
                               outFolder=dst)
         
+    if mapDiff:
+        for s in range(len(states)):
+            for v in range(len(varieties[s])):
+                for d in mapDates:
+                    for p in modisPct:
+                        # Transform into date to be able to reformat
+                        date = datetime.strptime(d, '%Y-%m-%d').date()  
+                        
+                        #Mapping function
+                        md.mapModisRanking(mapSize=mapSizes[s], 
+                                           mapTitle=mapTitles[s][v]+date.strftime('%B %d, %Y'), 
+                                           mapFile=os.path.join(dst,states[s],
+                                                                ('ndvi_'+d+ 
+                                                                 '_CompareToDecile_0BelowMin_110AboveMax_'+ 
+                                                                 varieties[s][v]+'_maskedbelow'+p+ 
+                                                                 'pct.tif')),
+                                           boundaryFile=os.path.join(dataDir,states[s],
+                                                                     boundaries[s]), 
+                                           notePosition=notePositions[s], 
+                                           noteSize=noteFont,
+                                           legendPosition=legendPositions[s],
+                                           legendSizes=legendFonts,
+                                           outName=os.path.join(destFolder,
+                                                                ('decile_comparison_'+
+                                                                 states[s]+'_'+varieties[s][v]+
+                                                                 '_'+p+'pct_'+d+'.png')), 
+                                           outRes=200,
+                                           backgroundLabel='Less than '+p+'% '+varieties[s][v].title(),
+                                           citiesFile=os.path.join(dataDir,states[s],'places',cities[s]), 
+                                           citiesField=citiesField[s],
+                                           citiesLabelSize=citiesLabelSizes[s], 
+                                           citiesMarkerSize=citiesMarkerSizes[s], 
+                                           scaleLen=scaleLen[s], 
+                                           scaleSize=scaleFont, 
+                                           scalePosition=scalePositions[s])
                     
     if checkPercMissing:
         # Get the names of all the masked rasters on file

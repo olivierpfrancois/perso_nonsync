@@ -25,7 +25,7 @@ sys.dont_write_bytecode = True
 
 import os, re, multiprocessing
 import pathos.multiprocessing as mp
-import MODIS_gedata_toolbox as md  # GEDATA toolbox for MODIS related tools
+import gedata_tbox_MODIS as md  # GEDATA toolbox for MODIS related tools
 import gapfill_test  # Python implementation of the interpolation algorithm
 from datetime import datetime
 from csv import DictWriter

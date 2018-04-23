@@ -6,7 +6,7 @@ from statsmodels.distributions.empirical_distribution import ECDF
 import scipy.stats as ss
 import pandas as pd
 import statsmodels.formula.api as smf
-import raster_gedata_toolbox as rt
+import gedata_tbox_raster as rt
 import os, re, multiprocessing
 import pathos.multiprocessing as mp
 import functools
@@ -383,9 +383,9 @@ def gapFill(rasters, seasons, years, outFolder, suffix,
                                            replaceVal=replaceVal,
                                            nodataIn=nodata[0], 
                                            nodataOut=nodataOut,
-                                           initialSize=initialSize,
                                            clipRange=clipRange, 
-                                           iMax=iMax) 
+                                           iMax=iMax,
+                                           initialSize=initialSize) 
                                            for pixel in mps]
             
             else:
@@ -394,10 +394,10 @@ def gapFill(rasters, seasons, years, outFolder, suffix,
                                        seasons=seasons, years=years,
                                        replaceVal=replaceVal,
                                        nodataIn=nodata[0],
-                                       nodataOut=nodataOut,
-                                       initialSize=initialSize, 
+                                       nodataOut=nodataOut, 
                                        clipRange=clipRange,
-                                       iMax=iMax)
+                                       iMax=iMax,
+                                       initialSize=initialSize)
                 
                 mpsFill = p.map(pp, mps)
                 
@@ -446,7 +446,7 @@ def gapFill(rasters, seasons, years, outFolder, suffix,
 
 def gapFillOnePixel(pixel, season, year, files, seasons, years, 
                     replaceVal,nodataIn, nodataOut, 
-                    initialSize=[10, 10, 1, 5], clipRange, iMax):
+                    clipRange, iMax, initialSize=[10, 10, 1, 5]):
     '''
     Calculate the interpolated value for a pixel to fill
     Returns a list where the first 4 elements are the 

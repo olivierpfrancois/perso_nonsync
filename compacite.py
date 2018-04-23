@@ -2,7 +2,7 @@ import numpy as np
 from osgeo import gdal
 import functools
 import multiprocessing as mp
-import raster_gedata_toolbox as rt
+import gedata_tbox_raster as rt
 
 from scipy.stats import _distn_infrastructure
 

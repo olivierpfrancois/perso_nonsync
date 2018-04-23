@@ -2,7 +2,7 @@ from osgeo import gdal
 import os, re, csv, platform, sys
 import numpy as np
 import subprocess
-import raster_gedata_toolbox as rt
+import gedata_tbox_raster as rt
 
 def combineClassif(orderClassif, classifFolder, legendFolder, tempFolder, 
                    outClassifName, outLegendName, 
